@@ -79,7 +79,7 @@ void connectToWiFi()
       {
         if (millis() - point > 5000)
         {
-          goto failed_connect;
+          goto failed_connection; // if the wifi credentials are wrong, get new ones
         }
         delay(1000);
         found = true;
@@ -91,7 +91,7 @@ void connectToWiFi()
   if (found == false) // if the wifi credentials are not stored in the file
   {
   // get ssid and pass from user
-  failed_connect:
+  failed_connection:
     Serial.print("Please input your SSID: ");
     // ssid = Serial.readStringUntil(10); // read until new line
     Serial.print("Please input your password: ");
@@ -102,7 +102,7 @@ void connectToWiFi()
     {
       if (millis() - point > 5000)
       {
-        goto failed_connect;
+        goto failed_connection; // wrong password
       }
       delay(1000);
       Serial.println("Connecting to WiFi...");
