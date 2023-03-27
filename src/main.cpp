@@ -4,25 +4,42 @@
 #include <Ticker.h>
 #include <TFT_eSPI.h>
 #include <freertos/FreeRTOS.h>
+#include <freertos/event_groups.h>
 
 #include "GetData.h"
 #include "VariableDeclaration.h"
+#include "WiFiHandle.h"
 
 using namespace fs;
 
-TaskHandle_t GetData_Handle;
-TaskHandle_t ProcessingData_Handle;
+char city_name[50];
+char ssid[56], pass[56];
+
+TaskHandle_t WiFi_Handle;
+TaskHandle_t GetCurrentWeather_Handle;
+TaskHandle_t ProcessingCurrentWeather_Handle;
 TaskHandle_t DisplayData_Handle;
-Ticker GetDataTicker;
+TaskHandle_t GetForecastWeather_Handle;
+TaskHandle_t ProcessingForecastWeather_Handle;
+Ticker GetCurrentWeather_Ticker;
+Ticker GetForeCastWeather_Ticker;
+
+QueueHandle_t current_weather_queue = xQueueCreate(1, sizeof(weather_data));
+QueueHandle_t forecast_queue = xQueueCreate(8, sizeof(forecast));
+
+TFT_eSPI tft = TFT_eSPI(320, 240);
+TFT_eSprite title = TFT_eSprite(&tft);
+
+HTTPClient http;
 
 /*---------------------------------Prototypes-----------------------------------*/
-void startGetData();
-void connectToWiFi();
+void startGetCurrentWeather();
+void startGetForecastWeather();
 void setup()
 {
   // put your setup code here, to run once:
   Serial.begin(115200);
-  Serial1.setPins(3, 4);
+  Serial1.setPins(3, 4); // pin for GPS module
   Serial1.begin(9600);
 
   if (!FFat.begin(true))
@@ -32,20 +49,28 @@ void setup()
     return;
   }
 
-  connectToWiFi();
-  delay(100);
+  connectToWiFi(); // use for get WiFi information
 
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer); // sync time with the internet
 
   tft.init();
   tft.fillScreen(TFT_BLACK);
   tft.setRotation(1);
-  tft.loadFont("YuGothicUI-Bold-11", FFat);
+  tft.loadFont("Calibri-Bold-11", FFat);
 
-  GetDataTicker.attach(3600, startGetData);
+  title.createSprite(160, 30);
+  title.loadFont("Calibri-Bold-11", FFat);
 
-  xTaskCreatePinnedToCore(GetData, "GetData", 10000, NULL, 1, &GetData_Handle, 0);
-  xTaskCreatePinnedToCore(ProcessingData, "ProcessingData", 10000, NULL, 1, &ProcessingData_Handle, 0);
+  GetCurrentWeather_Ticker.attach(3600, startGetCurrentWeather);
+  GetForeCastWeather_Ticker.attach(24 * 3600 * 7, startGetForecastWeather);
+
+  char StackSize[8192];
+
+  xTaskCreatePinnedToCore(HandleWiFi, "WiFi_Handle", sizeof(StackSize), NULL, 1, &WiFi_Handle, 0);
+  xTaskCreatePinnedToCore(GetCurrentWeather, "GetCurrentWeather", sizeof(StackSize), NULL, 1, &GetCurrentWeather_Handle, 1);
+  xTaskCreatePinnedToCore(ProcessingCurrentWeather, "ProcessingCurrentWeather", sizeof(StackSize), NULL, 0, &ProcessingCurrentWeather_Handle, 0);
+  xTaskCreatePinnedToCore(GetForecastWeather, "GetForecastWeather", sizeof(StackSize), NULL, 1, &GetForecastWeather_Handle, 0);
+  xTaskCreatePinnedToCore(ProcessingForecastWeather, "ProcessingForecastWeather", sizeof(StackSize), NULL, 0, &ProcessingForecastWeather_Handle, 0);
 }
 
 void loop()
@@ -53,63 +78,12 @@ void loop()
   // put your main code here, to run repeatedly:
 }
 
-void startGetData()
+void startGetCurrentWeather()
 {
-  xTaskNotify(GetData_Handle, 1, eSetValueWithOverwrite);
+  // xTaskNotify(GetCurrentWeather_Handle, 1, eSetValueWithOverwrite);
 }
 
-void connectToWiFi()
+void startGetForecastWeather()
 {
-  bool found = false; // bool to check if the wifi credentials are stored in the file
-  String ssid, pass;
-  WiFi.mode(WIFI_STA);
-  File data = FFat.open("/wifi_credentials.json", "r"); // read data from file
-  PSRAMJsonDocument doc(4096);
-  deserializeJson(doc, data.readString());
-  data.close();
-  int n = WiFi.scanNetworks();
-  for (int i = 0; i < n; i++) // check if the wifi credentials are stored in the file
-  {
-    pass = doc[WiFi.SSID(i)].as<String>();
-    if (pass != "null")
-    {
-      WiFi.begin(WiFi.SSID(i).c_str(), pass.c_str());
-      ulong point = millis();
-      while (WiFi.status() != WL_CONNECTED)
-      {
-        if (millis() - point > 5000)
-        {
-          goto failed_connection; // if the wifi credentials are wrong, get new ones
-        }
-        delay(1000);
-        found = true;
-        Serial.println("Connecting to WiFi...");
-      }
-      return;
-    }
-  }
-  if (found == false) // if the wifi credentials are not stored in the file
-  {
-  // get ssid and pass from user
-  failed_connection:
-    Serial.print("Please input your SSID: ");
-    // ssid = Serial.readStringUntil(10); // read until new line
-    Serial.print("Please input your password: ");
-    // pass = Serial.readStringUntil(10); // read until new line
-    WiFi.begin(ssid.c_str(), pass.c_str());
-    ulong point = millis();
-    while (WiFi.status() != WL_CONNECTED)
-    {
-      if (millis() - point > 5000)
-      {
-        goto failed_connection; // wrong password
-      }
-      delay(1000);
-      Serial.println("Connecting to WiFi...");
-    }
-    data = FFat.open("/wifi_credentials.json", "w");
-    doc[ssid] = pass;
-    data.print(doc.as<String>());
-  }
-  return;
+  // xTaskNotify(GetForecastWeather_Handle, 1, eSetValueWithOverwrite);
 }
