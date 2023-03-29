@@ -33,8 +33,6 @@ extern HTTPClient http;
 static double lat, lon;
 static uint16_t http_code;
 
-extern QueueHandle_t current_weather_queue;
-extern QueueHandle_t forecast_queue;
 
 void GetCurrentWeather(void *pvParameters);
 void ProcessingCurrentWeather(void *pvParameters);

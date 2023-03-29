@@ -4,7 +4,6 @@
 #include <Ticker.h>
 #include <TFT_eSPI.h>
 #include <freertos/FreeRTOS.h>
-#include <freertos/event_groups.h>
 
 #include "GetData.h"
 #include "VariableDeclaration.h"
@@ -24,6 +23,9 @@ TaskHandle_t ProcessingForecastWeather_Handle;
 Ticker GetCurrentWeather_Ticker;
 Ticker GetForeCastWeather_Ticker;
 
+EventGroupHandle_t WiFi_EventGroup = xEventGroupCreate();
+EventGroupHandle_t GetWeather_EventGroup = xEventGroupCreate();
+
 QueueHandle_t current_weather_queue = xQueueCreate(1, sizeof(weather_data));
 QueueHandle_t forecast_queue = xQueueCreate(8, sizeof(forecast));
 
@@ -39,10 +41,11 @@ void setup()
 {
   // put your setup code here, to run once:
   Serial.begin(115200);
-  Serial1.setPins(3, 4); // pin for GPS module
+  Serial.println("System starting...");
   Serial1.begin(9600);
+  Serial1.setPins(3, 4); // pin for GPS module
 
-  if (!FFat.begin(true))
+  if (!FFat.begin(false))
   {
     Serial.println("FFat Mount Failed");
     ESP.restart();
@@ -50,27 +53,30 @@ void setup()
   }
 
   connectToWiFi(); // use for get WiFi information
+  Serial.println("WiFi connected");
 
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer); // sync time with the internet
+  Serial.println("Time synced");
 
-  tft.init();
-  tft.fillScreen(TFT_BLACK);
-  tft.setRotation(1);
-  tft.loadFont("Calibri-Bold-11", FFat);
+  // tft.init();
+  // tft.fillScreen(TFT_BLACK);
+  // tft.setRotation(1);
+  // tft.loadFont("Calibri-Bold-11", FFat);
 
-  title.createSprite(160, 30);
-  title.loadFont("Calibri-Bold-11", FFat);
+  // title.createSprite(160, 30);
+  // title.loadFont("Calibri-Bold-11", FFat);
 
   GetCurrentWeather_Ticker.attach(3600, startGetCurrentWeather);
   GetForeCastWeather_Ticker.attach(24 * 3600 * 7, startGetForecastWeather);
 
-  char StackSize[8192];
+  xTaskCreatePinnedToCore(HandleWiFi, "WiFi_Handle", 4096, NULL, 1, &WiFi_Handle, 0);
+  xTaskCreatePinnedToCore(GetCurrentWeather, "GetCurrentWeather", 8192, NULL, 1, &GetCurrentWeather_Handle, 0);
+  xTaskCreatePinnedToCore(ProcessingCurrentWeather, "ProcessingCurrentWeather", 4096, NULL, 0, &ProcessingCurrentWeather_Handle, 0);
+  xTaskCreatePinnedToCore(GetForecastWeather, "GetForecastWeather", 5120, NULL, 1, &GetForecastWeather_Handle, 0);
+  xTaskCreatePinnedToCore(ProcessingForecastWeather, "ProcessingForecastWeather", 5120, NULL, 0, &ProcessingForecastWeather_Handle, 0);
 
-  xTaskCreatePinnedToCore(HandleWiFi, "WiFi_Handle", sizeof(StackSize), NULL, 1, &WiFi_Handle, 0);
-  xTaskCreatePinnedToCore(GetCurrentWeather, "GetCurrentWeather", sizeof(StackSize), NULL, 1, &GetCurrentWeather_Handle, 1);
-  xTaskCreatePinnedToCore(ProcessingCurrentWeather, "ProcessingCurrentWeather", sizeof(StackSize), NULL, 0, &ProcessingCurrentWeather_Handle, 0);
-  xTaskCreatePinnedToCore(GetForecastWeather, "GetForecastWeather", sizeof(StackSize), NULL, 1, &GetForecastWeather_Handle, 0);
-  xTaskCreatePinnedToCore(ProcessingForecastWeather, "ProcessingForecastWeather", sizeof(StackSize), NULL, 0, &ProcessingForecastWeather_Handle, 0);
+  xEventGroupSetBits(GetWeather_EventGroup, START_GET_CURRENT_WEATHER);
+  Serial.println("Fished setup");
 }
 
 void loop()
@@ -80,10 +86,26 @@ void loop()
 
 void startGetCurrentWeather()
 {
-  // xTaskNotify(GetCurrentWeather_Handle, 1, eSetValueWithOverwrite);
+  Serial.println("Get Current Weather Start");
+  BaseType_t xHigherPriorityTaskWoken, xResult;
+  xHigherPriorityTaskWoken = pdFALSE;
+  xResult = xEventGroupSetBitsFromISR(GetWeather_EventGroup, START_GET_CURRENT_WEATHER, &xHigherPriorityTaskWoken);
+
+  if (xResult != pdFAIL)
+  {
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+  }
 }
 
 void startGetForecastWeather()
 {
-  // xTaskNotify(GetForecastWeather_Handle, 1, eSetValueWithOverwrite);
+  Serial.println("Get Forecast Weather Start");
+  BaseType_t xHigherPriorityTaskWoken, xResult;
+  xHigherPriorityTaskWoken = pdFALSE;
+  xResult = xEventGroupSetBitsFromISR(GetWeather_EventGroup, START_GET_FORECAST_WEATHER, &xHigherPriorityTaskWoken);
+
+  if (xResult != pdFAIL)
+  {
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+  }
 }
