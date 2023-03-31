@@ -75,7 +75,6 @@ void GetForecastWeather(void *pvParameters) // get 8-day forecast
     char forecast[128];
     char payload[4096];
     PSRAMJsonDocument doc(5120);
-    // xTaskNotifyWait(0x00, 0xFFFFFFFF, notificationValue, portMAX_DELAY);
     for (;;)
     {
         // get data phase
@@ -107,7 +106,7 @@ void ProcessingForecastWeather(void *pvParameters)
     for (;;)
     {
         xEventGroupWaitBits(GetWeather_EventGroup, DONE_GET_FORECAST_WEATHER, pdTRUE, pdTRUE, portMAX_DELAY);
-        File data = FFat.open("/forecast.txt", "r");
+        File data = FFat.open("/forecast.txt", "w", true);
     }
 }
 void getCoordinates(double *lat, double *lon)

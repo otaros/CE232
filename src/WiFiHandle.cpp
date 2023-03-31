@@ -139,5 +139,5 @@ void handleSave()
 void createwebserver()
 {
     server.on("/", handleRoot);
-    server.on("/submited", handleSave);
+    server.on("/save", handleSave);
 }

@@ -14,6 +14,8 @@ using namespace fs;
 char city_name[50];
 char ssid[56], pass[56];
 
+TinyGPSPlus gps;
+
 TaskHandle_t WiFi_Handle;
 TaskHandle_t GetCurrentWeather_Handle;
 TaskHandle_t ProcessingCurrentWeather_Handle;
@@ -76,7 +78,7 @@ void setup()
   xTaskCreatePinnedToCore(ProcessingForecastWeather, "ProcessingForecastWeather", 5120, NULL, 0, &ProcessingForecastWeather_Handle, 0);
 
   xEventGroupSetBits(GetWeather_EventGroup, START_GET_CURRENT_WEATHER);
-  Serial.println("Fished setup");
+  Serial.println("Finished setup");
 }
 
 void loop()

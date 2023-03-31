@@ -34,7 +34,7 @@ const int daylightOffset_sec = 0; // UTC +7
 const char api_key[] = "bb26bc20fc2f36129e121e0a13e23c1a";
 
 static struct tm structTime;
-static TinyGPSPlus gps;
+extern TinyGPSPlus gps;
 extern char city_name[50];
 
 extern TFT_eSPI tft;
