@@ -17,6 +17,25 @@ void DisplayTitle(void *pvParameters)
     }
 }
 
+void DisplayCurrentWeather(void *pvParameters)
+{
+    char filename[10];
+    for (;;)
+    {
+        xEventGroupWaitBits(GetWeather_EventGroup, DONE_PROCESSING_CURRENT_WEATHER_FLAG, pdTRUE, pdTRUE, portMAX_DELAY);
+        Serial.println("Start displaying current weather");
+        weather_data *data = (weather_data *)ps_malloc(sizeof(weather_data));
+        BaseType_t ret = xQueueReceive(current_weather_queue, data, portMAX_DELAY);
+        while (ret != pdTRUE)
+        {
+            ret = xQueueReceive(current_weather_queue, data, portMAX_DELAY);
+        }
+        sprintf(filename, "/%s.bmp", data->icon);
+        Serial.println(filename);
+        drawBmp(filename, 128, 50);
+    }
+}
+
 void drawBmp(const char *filename, int16_t x, int16_t y)
 {
 

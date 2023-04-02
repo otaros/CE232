@@ -21,12 +21,29 @@
 
 #define START_GET_CURRENT_WEATHER_FLAG (1 << 0)
 #define DONE_GET_CURRENT_WEATHER_FLAG (1 << 1)
-#define START_PROCESSING_CURRENT_WEATHER_FLAG (1 << 2)
+#define DONE_PROCESSING_CURRENT_WEATHER_FLAG (1 << 2)
 #define START_GET_FORECAST_WEATHER_FLAG (1 << 3)
 #define DONE_GET_FORECAST_WEATHER_FLAG (1 << 4)
-#define START_PROCESSING_FORECAST_WEATHER_FLAG (1 << 5)
+#define DONE_PROCESSING_FORECAST_WEATHER_FLAG (1 << 5)
 
 #define FORECAST_NUMS 8
+
+struct weather_data
+{
+    float temp, temp_min, temp_max, feels_like;
+    float pressure, humidity;
+    float wind_speed;
+    uint16_t wind_deg;
+    ulong sunrise, sunset;
+    char icon[4];
+};
+
+struct forecast
+{
+    char icon[4];
+    ulong dt;
+    float temp_max, temp_min;
+};
 
 extern char ssid[56], pass[56];
 const char ntpServer[] = "pool.ntp.org";
@@ -45,9 +62,10 @@ extern TFT_eSprite title;
 extern TaskHandle_t WiFi_Handle;
 extern TaskHandle_t GetCurrentWeather_Handle;
 extern TaskHandle_t ProcessingCurrentWeather_Handle;
-extern TaskHandle_t DisplayTitle_Handle;
 extern TaskHandle_t GetForecastWeather_Handle;
 extern TaskHandle_t ProcessingForecastWeather_Handle;
+extern TaskHandle_t DisplayTitle_Handle;
+extern TaskHandle_t DisplayCurrentWeather_Handle;
 
 extern QueueHandle_t current_weather_queue;
 extern QueueHandle_t forecast_queue;

@@ -33,8 +33,8 @@ void GetCurrentWeather(void *pvParameters)
         http.end();
         Serial.println(payload); // show the payload
         deserializeJson(doc, payload);
-        File data = FFat.open("/current.txt", "w", true);
-        data.print(payload);
+        File data = FFat.open("/current.json", "w", true);
+        data.print(doc.as<String>());
         data.flush();
         data.close();
 
@@ -49,12 +49,11 @@ void ProcessingCurrentWeather(void *pvParameters)
     for (;;)
     {
         // Processing current weather
-        xEventGroupWaitBits(GetWeather_EventGroup, START_PROCESSING_CURRENT_WEATHER_FLAG, pdTRUE, pdTRUE, portMAX_DELAY);
+        xEventGroupWaitBits(GetWeather_EventGroup, DONE_GET_CURRENT_WEATHER_FLAG, pdTRUE, pdTRUE, portMAX_DELAY);
         Serial.println("Start processing current weather");
-        File data = FFat.open("/current.txt", "r");
-        String payload = data.readString();
+        File data = FFat.open("/current.json", "r");
         PSRAMJsonDocument doc(4096);
-        deserializeJson(doc, payload);
+        deserializeJson(doc, data.readString());
         weather_data *current = (weather_data *)ps_malloc(sizeof(weather_data));
         current->temp = doc["main"]["temp"];
         current->temp_min = doc["main"]["temp_min"];
@@ -65,12 +64,16 @@ void ProcessingCurrentWeather(void *pvParameters)
         current->wind_speed = doc["wind"]["speed"];
         current->wind_deg = doc["wind"]["deg"];
         current->sunrise = doc["sys"]["sunrise"];
-        doc["weather"][0]["icon"].as<String>().toCharArray(current->icon, 3);
+        doc["weather"][0]["icon"].as<String>().toCharArray(current->icon, 4);
         data.close();
 
-        xQueueSend(current_weather_queue, current, portMAX_DELAY);
-        free(current); // free the memory
+        BaseType_t ret = xQueueSend(current_weather_queue, current, portMAX_DELAY);
+        while (ret != pdTRUE)
+        {
+            ret = xQueueSend(current_weather_queue, current, portMAX_DELAY);
+        }
         Serial.println("Done processing current weather");
+        xEventGroupSetBits(GetWeather_EventGroup, DONE_PROCESSING_CURRENT_WEATHER_FLAG);
         taskYIELD(); // finish the task
     }
 }
@@ -94,8 +97,8 @@ void GetForecastWeather(void *pvParameters) // get 8-day forecast
         http_code = http.GET();
         http.getString().toCharArray(payload, sizeof(payload));
         deserializeJson(doc, payload);
-        File data = FFat.open("/forecast.txt", "w", true);
-        data.print(payload);
+        File data = FFat.open("/forecast.json", "w", true);
+        data.print(doc.as<String>());
         data.flush(); // guarantee that the data is written to the file
         data.close();
         http.end();
@@ -111,10 +114,9 @@ void ProcessingForecastWeather(void *pvParameters)
     for (;;)
     {
         xEventGroupWaitBits(GetWeather_EventGroup, DONE_GET_FORECAST_WEATHER_FLAG, pdTRUE, pdTRUE, portMAX_DELAY);
-        File data = FFat.open("/forecast.txt", "r");
-        String payload = data.readString();
+        File data = FFat.open("/forecast.json", "r");
         PSRAMJsonDocument doc(5120);
-        deserializeJson(doc, payload);
+        deserializeJson(doc, data.readString());
         forecast **forecast_data = (forecast **)ps_malloc(sizeof(forecast *) * FORECAST_NUMS);
         for (int i = 0; i < 8; i++)
         {

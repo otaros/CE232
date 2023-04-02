@@ -4,6 +4,7 @@
 #include <Ticker.h>
 #include <TFT_eSPI.h>
 #include <freertos/FreeRTOS.h>
+#include <driver/adc.h>
 
 #include "GetData.h"
 #include "VariableDeclaration.h"
@@ -22,16 +23,17 @@ TinyGPSPlus gps;
 TaskHandle_t WiFi_Handle;
 TaskHandle_t GetCurrentWeather_Handle;
 TaskHandle_t ProcessingCurrentWeather_Handle;
-TaskHandle_t DisplayTitle_Handle;
 TaskHandle_t GetForecastWeather_Handle;
 TaskHandle_t ProcessingForecastWeather_Handle;
+TaskHandle_t DisplayTitle_Handle;
+TaskHandle_t DisplayCurrentWeather_Handle;
 Ticker GetCurrentWeather_Ticker;
 Ticker GetForeCastWeather_Ticker;
 
 EventGroupHandle_t WiFi_EventGroup = xEventGroupCreate();
 EventGroupHandle_t GetWeather_EventGroup = xEventGroupCreate();
 
-QueueHandle_t current_weather_queue = xQueueCreate(1, sizeof(weather_data));
+QueueHandle_t current_weather_queue = xQueueCreate(2, sizeof(weather_data));
 QueueHandle_t forecast_queue = xQueueCreate(8, sizeof(forecast));
 
 TFT_eSPI tft = TFT_eSPI();
@@ -66,13 +68,15 @@ void setup()
     return;
   }
   tft.loadFont("Calibri-Bold-11", FFat);
+  Serial.println("FFat Mount Success");
   tft.println("FFat Mount Success");
   delay(500);
 
+  Serial.println("Connecting to WiFi...");
   tft.println("Connecting to WiFi...");
   connectToWiFi(); // use for get WiFi information
-  Serial.println("WiFi connected to" + String(ssid));
-  tft.println("WiFi connected" + String(ssid));
+  Serial.println("WiFi connected to " + String(ssid));
+  tft.println("WiFi connected to " + String(ssid));
   delay(500);
 
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer); // sync time with the internet
@@ -90,11 +94,12 @@ void setup()
 
   xTaskCreatePinnedToCore(HandleWiFi, "WiFi_Handle", 3072, NULL, 1, &WiFi_Handle, 0);
   xTaskCreatePinnedToCore(GetCurrentWeather, "GetCurrentWeather", 8192, NULL, 1, &GetCurrentWeather_Handle, 0);
-  xTaskCreatePinnedToCore(ProcessingCurrentWeather, "ProcessingCurrentWeather", 4096, NULL, 0, &ProcessingCurrentWeather_Handle, 0);
+  xTaskCreatePinnedToCore(ProcessingCurrentWeather, "ProcessingCurrentWeather", 4096, NULL, 1, &ProcessingCurrentWeather_Handle, 0);
   xTaskCreatePinnedToCore(GetForecastWeather, "GetForecastWeather", 5120, NULL, 1, &GetForecastWeather_Handle, 0);
-  xTaskCreatePinnedToCore(ProcessingForecastWeather, "ProcessingForecastWeather", 5120, NULL, 0, &ProcessingForecastWeather_Handle, 0);
+  xTaskCreatePinnedToCore(ProcessingForecastWeather, "ProcessingForecastWeather", 5120, NULL, 1, &ProcessingForecastWeather_Handle, 0);
 
   xTaskCreatePinnedToCore(DisplayTitle, "Display Title", 2048, NULL, 1, &DisplayTitle_Handle, 1);
+  xTaskCreatePinnedToCore(DisplayCurrentWeather, "Display Current Weather", 4096, NULL, 1, &DisplayCurrentWeather_Handle, 1);
 
   xEventGroupSetBits(GetWeather_EventGroup, START_GET_CURRENT_WEATHER_FLAG); // first run
 

@@ -11,10 +11,6 @@ void connectToWiFi()
     deserializeJson(doc, data.readString());
     data.close();
     int n = WiFi.scanNetworks();
-    while (WiFi.scanComplete() == WIFI_SCAN_RUNNING)
-    {
-        delay(100);
-    }
     for (int i = 0; i < n; i++) // check if the wifi credentials are stored in the file
     {
         if (doc.containsKey(WiFi.SSID(i).c_str()))
@@ -106,8 +102,8 @@ void HandleWiFi(void *pvParameters)
         {
             xEventGroupSetBits(WiFi_EventGroup, WIFI_IS_AVAILABLE_FOR_USE_FLAG);
         }
-        // xTaskNotifyWait(0, 0xFFFFFFFF, notificationValue, portMAX_DELAY);
         xEventGroupWaitBits(WiFi_EventGroup, DONE_USING_WIFI_FLAG, pdTRUE, pdFALSE, portMAX_DELAY);
+        Serial.println("Disconnecting from WiFi");
         WiFi.disconnect();
         WiFi.mode(WIFI_OFF);
     }

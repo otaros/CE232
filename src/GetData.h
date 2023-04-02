@@ -13,22 +13,6 @@
 
 #include "VariableDeclaration.h"
 
-struct weather_data
-{
-    float temp, temp_min, temp_max, feels_like;
-    float pressure, humidity;
-    float wind_speed;
-    uint16_t wind_deg;
-    ulong sunrise, sunset;
-    char icon[3];
-};
-
-struct forecast
-{
-    char icon[3];
-    ulong dt;
-    float temp_max, temp_min;
-};
 extern HTTPClient http;
 static double lat, lon;
 static uint16_t http_code;
