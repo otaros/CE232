@@ -15,7 +15,6 @@ void connectToWiFi();
 void HandleWiFi(void *pvParameters);
 void createwebserver();
 void handleRoot();
-void openwebserver();
-
+void openwebserver(const char *ssid, const char *pass);
 
 #endif // __WIFIHANDLE_H__

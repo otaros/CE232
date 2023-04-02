@@ -51,6 +51,7 @@ void setup()
   Serial1.setPins(4, 5); // pin for GPS module
 
   tft.init();
+  tft.setTextWrap(true, true);
   tft.setRotation(1);
   tft.fillScreen(TFT_BLACK);
   tft.setRotation(1);
@@ -64,6 +65,7 @@ void setup()
     ESP.restart();
     return;
   }
+  tft.loadFont("Calibri-Bold-11", FFat);
   tft.println("FFat Mount Success");
   delay(500);
 
@@ -100,6 +102,7 @@ void setup()
   tft.println("Finished setup");
   delay(500);
   tft.fillScreen(TFT_BLACK); // clear display
+  tft.unloadFont();
 }
 
 void loop()

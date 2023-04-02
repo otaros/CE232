@@ -44,9 +44,16 @@ void connectToWiFi()
         // get ssid and pass from user
         while (true)
         {
-            openwebserver();
-            Serial.println("Please connect to WiFi: Weather Station");
-            Serial.println("And connect to this IP: " + WiFi.softAPIP().toString());
+            uint8_t mac[6];
+            WiFi.macAddress(mac);
+            char ap_ssid[32];
+            sprintf(ap_ssid, "Weather Station %02X%02X%02X", mac[3], mac[4], mac[5]);
+            openwebserver(ap_ssid, "");
+            tft.println("Not found WiFi credentials");
+            tft.println("Please connect to WiFi: \"" + String(ap_ssid) + "\"");
+            tft.println("And access to this IP: \"" + WiFi.softAPIP().toString() + "\"");
+            Serial.println("Please connect to WiFi: \"" + String(ap_ssid) + "\"");
+            Serial.println("And access to this IP: " + WiFi.softAPIP().toString());
             while (WiFi.status() != WL_CONNECTED)
             {
                 delay(500);
@@ -106,12 +113,12 @@ void HandleWiFi(void *pvParameters)
     }
 }
 
-void openwebserver()
+void openwebserver(const char *ssid, const char *pass)
 {
     WiFi.disconnect();
     WiFi.mode(WIFI_AP_STA);
 
-    WiFi.softAP("Weather Station ");
+    WiFi.softAP(ssid, pass);
 
     createwebserver();
     server.begin();
@@ -133,7 +140,19 @@ void handleSave()
     String html = file.readString();
     file.close();
     server.send(200, "text/html", html);
+    tft.println("Successfully received wifi credentials");
+    tft.println("Trying to connect...");
     WiFi.begin(ssid, pass);
+    unsigned long startAttemptTime = millis();
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        if (millis() - startAttemptTime > 1000)
+        {
+            tft.println("Failed to connect to WiFi, please try again");
+            break;
+        }
+        delay(100);
+    }
 }
 
 void createwebserver()
