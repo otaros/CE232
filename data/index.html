@@ -1,28 +1,45 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-  <meta charset="UTF-8">
-  <title>Home</title>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Document</title>
+
+  <style>
+    form {
+      display: flex;
+      flex-direction: column;
+      width: 300px;
+    }
+
+    button {
+      display: inline-block;
+      margin: 0 auto;
+      margin-top: 15px;
+      width: 100px;
+      padding: 6px 20px;
+    }
+
+    input[type="text"],
+    input[type="password"] {
+      box-sizing: border-box;
+      margin: 5px 0;
+    }
+  </style>
 </head>
 
 <body>
-  <form method='post' action='/save'>SSID:<input type='text' name='ssid'><br>Password:<input type='password'
-      name='pass'><br><input type='submit' value='Submit'></form>
+  <form method="post" action="/save">
+    <label for="ssid"> SSID:</label>
+    <input type="text" name="ssid" />
+    <label for="password">Password:</label>
+    <input type="password" name="pass" />
+    <button onclick="submit()" type="button">Submit</button>
+  </form>
+
+  </script>
 </body>
 
 </html>
-
-<style>
-  form {
-    flex-direction: column;
-    align-items: center;
-  }
-
-  input[type='text'],
-  input[type='password'] {
-    width: 30%;
-    box-sizing: border-box;
-    margin: 5px 0;
-  }
-</style>

@@ -76,7 +76,7 @@ void HandleWiFi(void *pvParameters)
 {
     for (;;)
     {
-        xEventGroupWaitBits(WiFi_EventGroup, REQUEST_WIFI, pdTRUE, pdFALSE, portMAX_DELAY);
+        xEventGroupWaitBits(WiFi_EventGroup, REQUEST_WIFI_FLAG, pdTRUE, pdFALSE, portMAX_DELAY);
         if (WiFi.status() != WL_CONNECTED)
         {
             WiFi.mode(WIFI_STA);
@@ -97,10 +97,10 @@ void HandleWiFi(void *pvParameters)
         }
         if (WiFi.status() == WL_CONNECTED)
         {
-            xEventGroupSetBits(WiFi_EventGroup, WIFI_IS_AVAILABLE_FOR_USE);
+            xEventGroupSetBits(WiFi_EventGroup, WIFI_IS_AVAILABLE_FOR_USE_FLAG);
         }
         // xTaskNotifyWait(0, 0xFFFFFFFF, notificationValue, portMAX_DELAY);
-        xEventGroupWaitBits(WiFi_EventGroup, DONE_USING_WIFI, pdTRUE, pdFALSE, portMAX_DELAY);
+        xEventGroupWaitBits(WiFi_EventGroup, DONE_USING_WIFI_FLAG, pdTRUE, pdFALSE, portMAX_DELAY);
         WiFi.disconnect();
         WiFi.mode(WIFI_OFF);
     }

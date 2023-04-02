@@ -4,9 +4,12 @@
 #ifndef __DISPLAY_H__
 #define __DISPLAY_H__
 
-char title_text[25];
-char date[40];
+static char title_text[50];
+static char date[40];
 
-void DisplayTitle();
+void DisplayTitle(void *pvParameters);
+uint16_t read16(fs::File &f);
+uint32_t read32(fs::File &f);
+void drawBmp(const char *filename, int16_t x, int16_t y);
 
 #endif // __DISPLAY_H__

@@ -9,10 +9,11 @@ void GetCurrentWeather(void *pvParameters)
     for (;;)
     {
         // get location phase
-        xEventGroupWaitBits(GetWeather_EventGroup, START_GET_CURRENT_WEATHER, pdTRUE, pdTRUE, portMAX_DELAY);
-        xEventGroupSetBits(WiFi_EventGroup, REQUEST_WIFI);
+        xEventGroupWaitBits(GetWeather_EventGroup, START_GET_CURRENT_WEATHER_FLAG, pdTRUE, pdTRUE, portMAX_DELAY);
+        Serial.println("Start getting current weather");
+        xEventGroupSetBits(WiFi_EventGroup, REQUEST_WIFI_FLAG);
         Serial.println("Requesting wifi connection (Current Weather)");
-        xEventGroupWaitBits(WiFi_EventGroup, WIFI_IS_AVAILABLE_FOR_USE, pdTRUE, pdTRUE, portMAX_DELAY);
+        xEventGroupWaitBits(WiFi_EventGroup, WIFI_IS_AVAILABLE_FOR_USE_FLAG, pdTRUE, pdTRUE, portMAX_DELAY);
 
         getCoordinates(&lat, &lon);
         snprintf(location, sizeof(location), "http://api.openweathermap.org/geo/1.0/reverse?lat=%.6f&lon=%.6f&limit=1&appid=%s", lat, lon, api_key);
@@ -38,8 +39,8 @@ void GetCurrentWeather(void *pvParameters)
         data.close();
 
         Serial.println("Done getting current weather");
-        xEventGroupSetBits(WiFi_EventGroup, DONE_USING_WIFI);
-        xEventGroupSetBits(GetWeather_EventGroup, DONE_GET_CURRENT_WEATHER);
+        xEventGroupSetBits(WiFi_EventGroup, DONE_USING_WIFI_FLAG);
+        xEventGroupSetBits(GetWeather_EventGroup, DONE_GET_CURRENT_WEATHER_FLAG);
         taskYIELD();
     }
 }
@@ -48,7 +49,8 @@ void ProcessingCurrentWeather(void *pvParameters)
     for (;;)
     {
         // Processing current weather
-        xEventGroupWaitBits(GetWeather_EventGroup, START_PROCESSING_CURRENT_WEATHER, pdTRUE, pdTRUE, portMAX_DELAY);
+        xEventGroupWaitBits(GetWeather_EventGroup, START_PROCESSING_CURRENT_WEATHER_FLAG, pdTRUE, pdTRUE, portMAX_DELAY);
+        Serial.println("Start processing current weather");
         File data = FFat.open("/current.txt", "r");
         String payload = data.readString();
         PSRAMJsonDocument doc(4096);
@@ -67,7 +69,9 @@ void ProcessingCurrentWeather(void *pvParameters)
         data.close();
 
         xQueueSend(current_weather_queue, current, portMAX_DELAY);
-        taskYIELD();
+        free(current); // free the memory
+        Serial.println("Done processing current weather");
+        taskYIELD(); // finish the task
     }
 }
 void GetForecastWeather(void *pvParameters) // get 8-day forecast
@@ -78,10 +82,11 @@ void GetForecastWeather(void *pvParameters) // get 8-day forecast
     for (;;)
     {
         // get data phase
-        xEventGroupWaitBits(GetWeather_EventGroup, START_GET_FORECAST_WEATHER, pdTRUE, pdTRUE, portMAX_DELAY);
-        xEventGroupSetBits(WiFi_EventGroup, REQUEST_WIFI);
+        xEventGroupWaitBits(GetWeather_EventGroup, START_GET_FORECAST_WEATHER_FLAG, pdTRUE, pdTRUE, portMAX_DELAY);
+        Serial.println("Start getting forecast weather");
+        xEventGroupSetBits(WiFi_EventGroup, REQUEST_WIFI_FLAG);
         Serial.println("Requesting wifi connection (Forecast Weather))");
-        xEventGroupWaitBits(WiFi_EventGroup, WIFI_IS_AVAILABLE_FOR_USE, pdTRUE, pdTRUE, portMAX_DELAY);
+        xEventGroupWaitBits(WiFi_EventGroup, WIFI_IS_AVAILABLE_FOR_USE_FLAG, pdTRUE, pdTRUE, portMAX_DELAY);
 
         getCoordinates(&lat, &lon);
         snprintf(forecast, sizeof(forecast), "http://api.openweathermap.org/data/2.5/onecall?lat=%.6f&lon=%.6f&exclude=current,minutely,hourly,alerts&appid=%s&units=metric", lat, lon, api_key);
@@ -91,13 +96,13 @@ void GetForecastWeather(void *pvParameters) // get 8-day forecast
         deserializeJson(doc, payload);
         File data = FFat.open("/forecast.txt", "w", true);
         data.print(payload);
-        data.flush();
+        data.flush(); // guarantee that the data is written to the file
         data.close();
         http.end();
 
         Serial.println("Done getting forecast weather");
-        xEventGroupSetBits(WiFi_EventGroup, DONE_USING_WIFI);
-        xEventGroupSetBits(GetWeather_EventGroup, DONE_GET_FORECAST_WEATHER);
+        xEventGroupSetBits(WiFi_EventGroup, DONE_USING_WIFI_FLAG);
+        xEventGroupSetBits(GetWeather_EventGroup, DONE_GET_FORECAST_WEATHER_FLAG);
         taskYIELD();
     }
 }
@@ -105,8 +110,23 @@ void ProcessingForecastWeather(void *pvParameters)
 {
     for (;;)
     {
-        xEventGroupWaitBits(GetWeather_EventGroup, DONE_GET_FORECAST_WEATHER, pdTRUE, pdTRUE, portMAX_DELAY);
-        File data = FFat.open("/forecast.txt", "w", true);
+        xEventGroupWaitBits(GetWeather_EventGroup, DONE_GET_FORECAST_WEATHER_FLAG, pdTRUE, pdTRUE, portMAX_DELAY);
+        File data = FFat.open("/forecast.txt", "r");
+        String payload = data.readString();
+        PSRAMJsonDocument doc(5120);
+        deserializeJson(doc, payload);
+        forecast **forecast_data = (forecast **)ps_malloc(sizeof(forecast *) * FORECAST_NUMS);
+        for (int i = 0; i < 8; i++)
+        {
+            forecast_data[i] = (forecast *)ps_malloc(sizeof(forecast));
+            forecast_data[i]->temp_min = doc["daily"][i]["temp"]["min"];
+            forecast_data[i]->temp_max = doc["daily"][i]["temp"]["max"];
+            doc["daily"][i]["weather"][0]["icon"].as<String>().toCharArray(forecast_data[i]->icon, 3);
+            xQueueSend(forecast_queue, forecast_data[i], portMAX_DELAY);
+        }
+        free(forecast_data); // free the memory
+        data.close();
+        taskYIELD();
     }
 }
 void getCoordinates(double *lat, double *lon)
