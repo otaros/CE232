@@ -5,6 +5,7 @@
 #include <TFT_eSPI.h>
 #include <freertos/FreeRTOS.h>
 #include <driver/adc.h>
+#include <esp32-hal-psram.h>
 
 #include "GetData.h"
 #include "VariableDeclaration.h"
@@ -33,11 +34,14 @@ Ticker GetForeCastWeather_Ticker;
 EventGroupHandle_t WiFi_EventGroup = xEventGroupCreate();
 EventGroupHandle_t GetWeather_EventGroup = xEventGroupCreate();
 
+SemaphoreHandle_t httpclient_mutex = xSemaphoreCreateMutex();
+
 QueueHandle_t current_weather_queue = xQueueCreate(2, sizeof(weather_data));
 QueueHandle_t forecast_queue = xQueueCreate(8, sizeof(forecast));
 
 TFT_eSPI tft = TFT_eSPI();
-TFT_eSprite title = TFT_eSprite(&tft);
+TFT_eSprite title_Sprite = TFT_eSprite(&tft);
+TFT_eSprite current_weather_Sprite = TFT_eSprite(&tft);
 
 HTTPClient http;
 
@@ -47,10 +51,19 @@ void startGetForecastWeather();
 void setup()
 {
   // put your setup code here, to run once:
+  
   Serial.begin(115200);
   Serial.println("System starting...");
   Serial1.begin(9600);
   Serial1.setPins(4, 5); // pin for GPS module
+
+  if (!psramFound())
+  {
+    Serial.println("Error: PSRAM not found!");
+    while (true)
+      ;
+  }
+  psramInit();
 
   tft.init();
   tft.setTextWrap(true, true);
@@ -80,22 +93,37 @@ void setup()
   delay(500);
 
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer); // sync time with the internet
+  tft.print("Waiting for time sync...");
+  Serial.print("Waiting for time sync...");
+  while (!getLocalTime(&structTime))
+  {
+    Serial.print(".");
+    tft.print(".");
+    delay(500);
+  }
+  Serial.println("");
+  tft.println("");
   Serial.println("Time synced");
   tft.println("Time synced");
   delay(500);
 
   // create title sprite and load font
-  title.createSprite(240, 11);
-  title.setColorDepth(16);
-  title.loadFont("Calibri-Bold-11", FFat);
+  title_Sprite.createSprite(240, 11);
+  title_Sprite.setColorDepth(16);
+  title_Sprite.loadFont("Calibri-Bold-11", FFat);
+
+  // create current weather sprite and load font
+  current_weather_Sprite.createSprite(240, 100);
+  current_weather_Sprite.setColorDepth(16);
+  current_weather_Sprite.loadFont("Calibri-Bold-11", FFat);
 
   GetCurrentWeather_Ticker.attach(3600, startGetCurrentWeather);            // trigger Get Current Weather every 1 hour
   GetForeCastWeather_Ticker.attach(24 * 3600 * 7, startGetForecastWeather); // trigger Get Forecast Weather every 7 days
 
   xTaskCreatePinnedToCore(HandleWiFi, "WiFi_Handle", 3072, NULL, 1, &WiFi_Handle, 0);
   xTaskCreatePinnedToCore(GetCurrentWeather, "GetCurrentWeather", 8192, NULL, 1, &GetCurrentWeather_Handle, 0);
-  xTaskCreatePinnedToCore(ProcessingCurrentWeather, "ProcessingCurrentWeather", 4096, NULL, 1, &ProcessingCurrentWeather_Handle, 0);
-  xTaskCreatePinnedToCore(GetForecastWeather, "GetForecastWeather", 5120, NULL, 1, &GetForecastWeather_Handle, 0);
+  xTaskCreatePinnedToCore(ProcessingCurrentWeather, "ProcessingCurrentWeather", 5120, NULL, 1, &ProcessingCurrentWeather_Handle, 0);
+  xTaskCreatePinnedToCore(GetForecastWeather, "GetForecastWeather", 8192, NULL, 1, &GetForecastWeather_Handle, 0);
   xTaskCreatePinnedToCore(ProcessingForecastWeather, "ProcessingForecastWeather", 5120, NULL, 1, &ProcessingForecastWeather_Handle, 0);
 
   xTaskCreatePinnedToCore(DisplayTitle, "Display Title", 2048, NULL, 1, &DisplayTitle_Handle, 1);
