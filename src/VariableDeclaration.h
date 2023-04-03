@@ -46,7 +46,7 @@ struct forecast
 };
 
 extern char ssid[56], pass[56];
-const char ntpServer[] = "pool.ntp.org";
+const char ntpServer[] = "time.google.com";
 const long gmtOffset_sec = 25200; // GMT +7
 const int daylightOffset_sec = 0; // UTC +7
 
@@ -57,7 +57,8 @@ extern TinyGPSPlus gps;
 extern char city_name[50];
 
 extern TFT_eSPI tft;
-extern TFT_eSprite title;
+extern TFT_eSprite title_Sprite;
+extern TFT_eSprite current_weather_Sprite;
 
 extern TaskHandle_t WiFi_Handle;
 extern TaskHandle_t GetCurrentWeather_Handle;
@@ -72,5 +73,7 @@ extern QueueHandle_t forecast_queue;
 
 extern EventGroupHandle_t WiFi_EventGroup;
 extern EventGroupHandle_t GetWeather_EventGroup;
+
+extern SemaphoreHandle_t httpclient_mutex;
 
 #endif // __VARIABLEDECLARATION_H__
