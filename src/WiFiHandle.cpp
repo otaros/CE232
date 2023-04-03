@@ -77,9 +77,20 @@ void connectToWiFi()
 
 void HandleWiFi(void *pvParameters)
 {
+    EventBits_t bits;
+    uint8_t count;
     for (;;)
     {
-        xEventGroupWaitBits(WiFi_EventGroup, REQUEST_WIFI_FLAG, pdTRUE, pdFALSE, portMAX_DELAY);
+        xEventGroupWaitBits(WiFi_EventGroup, REQUEST_WIFI_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
+        bits = xEventGroupWaitBits(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_FORECAST_WEATHER_FLAG, pdFALSE, pdFALSE, 1000 / portTICK_PERIOD_MS);
+        bits = bits & (START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_FORECAST_WEATHER_FLAG);
+        count = 0;
+        while (bits > 0)
+        {
+            count += bits & 1;
+            bits >>= 1;
+        }
+        Serial.printf("Number of tasks: %d\n", count);
         if (WiFi.status() != WL_CONNECTED)
         {
             WiFi.mode(WIFI_STA);
@@ -102,7 +113,20 @@ void HandleWiFi(void *pvParameters)
         {
             xEventGroupSetBits(WiFi_EventGroup, WIFI_IS_AVAILABLE_FOR_USE_FLAG);
         }
-        xEventGroupWaitBits(WiFi_EventGroup, DONE_USING_WIFI_FLAG, pdTRUE, pdFALSE, portMAX_DELAY);
+        while (true)
+        {
+            /* code */
+            xEventGroupWaitBits(WiFi_EventGroup, DONE_USING_WIFI_FLAG, pdTRUE, pdFALSE, portMAX_DELAY);
+            count--;
+            Serial.printf("Number of tasks remain: %d\n", count);
+            if (count == 0)
+            {
+                break;
+            }
+        }
+
+        xEventGroupClearBits(WiFi_EventGroup, WIFI_IS_AVAILABLE_FOR_USE_FLAG);
+        xEventGroupClearBits(WiFi_EventGroup, REQUEST_WIFI_FLAG);
         Serial.println("Disconnecting from WiFi");
         WiFi.disconnect();
         WiFi.mode(WIFI_OFF);

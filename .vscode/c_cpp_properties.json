@@ -10,9 +10,9 @@
             "includePath": [
                 "c:/Users/ADMIN/workspace/CE232/include",
                 "c:/Users/ADMIN/workspace/CE232/src",
-                "C:/Users/ADMIN/.platformio/packages/framework-arduinoespressif32/libraries/WebServer/src",
                 "C:/Users/ADMIN/.platformio/packages/framework-arduinoespressif32/libraries/HTTPClient/src",
                 "C:/Users/ADMIN/.platformio/packages/framework-arduinoespressif32/libraries/WiFiClientSecure/src",
+                "C:/Users/ADMIN/.platformio/packages/framework-arduinoespressif32/libraries/WebServer/src",
                 "C:/Users/ADMIN/.platformio/packages/framework-arduinoespressif32/libraries/FFat/src",
                 "C:/Users/ADMIN/.platformio/packages/framework-arduinoespressif32/libraries/WiFi/src",
                 "C:/Users/ADMIN/.platformio/packages/framework-arduinoespressif32/libraries/Ticker/src",
@@ -248,9 +248,9 @@
                 "path": [
                     "c:/Users/ADMIN/workspace/CE232/include",
                     "c:/Users/ADMIN/workspace/CE232/src",
-                    "C:/Users/ADMIN/.platformio/packages/framework-arduinoespressif32/libraries/WebServer/src",
                     "C:/Users/ADMIN/.platformio/packages/framework-arduinoespressif32/libraries/HTTPClient/src",
                     "C:/Users/ADMIN/.platformio/packages/framework-arduinoespressif32/libraries/WiFiClientSecure/src",
+                    "C:/Users/ADMIN/.platformio/packages/framework-arduinoespressif32/libraries/WebServer/src",
                     "C:/Users/ADMIN/.platformio/packages/framework-arduinoespressif32/libraries/FFat/src",
                     "C:/Users/ADMIN/.platformio/packages/framework-arduinoespressif32/libraries/WiFi/src",
                     "C:/Users/ADMIN/.platformio/packages/framework-arduinoespressif32/libraries/Ticker/src",

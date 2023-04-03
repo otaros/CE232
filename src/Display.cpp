@@ -2,7 +2,7 @@
 
 void DisplayTitle(void *pvParameters)
 {
-    xEventGroupWaitBits(GetWeather_EventGroup, DONE_GET_CURRENT_WEATHER_FLAG, pdTRUE, pdTRUE, portMAX_DELAY);
+    xEventGroupWaitBits(GetData_EventGroup, DONE_GET_CURRENT_WEATHER_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
     for (;;)
     {
         title_Sprite.fillScreen(TFT_BLACK);
@@ -20,21 +20,23 @@ void DisplayTitle(void *pvParameters)
 void DisplayCurrentWeather(void *pvParameters)
 {
     char filename[10];
+    char temperture[10];
+    BaseType_t ret;
     for (;;)
     {
-        xEventGroupWaitBits(GetWeather_EventGroup, DONE_PROCESSING_CURRENT_WEATHER_FLAG, pdTRUE, pdTRUE, portMAX_DELAY);
+        xEventGroupWaitBits(GetData_EventGroup, DONE_PROCESSING_CURRENT_WEATHER_FLAG, pdTRUE, pdFALSE, portMAX_DELAY);
         Serial.println("Start displaying current weather");
         weather_data *data = (weather_data *)ps_malloc(sizeof(weather_data));
-        BaseType_t ret = xQueueReceive(current_weather_queue, data, portMAX_DELAY);
+        ret = xQueueReceive(current_weather_queue, data, portMAX_DELAY);
         while (ret != pdTRUE)
         {
             ret = xQueueReceive(current_weather_queue, data, portMAX_DELAY);
         }
         sprintf(filename, "/%s.bmp", data->icon);
         Serial.println(filename);
+        current_weather_Sprite.fillScreen(TFT_BLACK);
         drawBmpToSprite(filename, 0, 0, &current_weather_Sprite);
         current_weather_Sprite.setCursor(20, 70);
-        char temperture[10];
         sprintf(temperture, "%.2f°C", data->temp);
         current_weather_Sprite.println(temperture);
         current_weather_Sprite.pushSprite(0, 50);
