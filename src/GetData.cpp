@@ -17,21 +17,22 @@ void GetCurrentWeather(void *pvParameters)
 
         getCoordinates(&lat, &lon);
         snprintf(location, sizeof(location), "http://api.openweathermap.org/geo/1.0/reverse?lat=%.6f&lon=%.6f&limit=1&appid=%s", lat, lon, api_key);
-        Serial.println(location); // for checking purpose
+        // Serial.println(location); // for checking purpose
+        xSemaphoreTake(httpclient_mutex, portMAX_DELAY); // take the mutex
         http.begin(location);
         http_code = http.GET();
-        http.getString().toCharArray(payload, sizeof(payload));
+        deserializeJson(doc, http.getString());
         http.end();
-        deserializeJson(doc, payload);
         doc[0]["name"].as<String>().toCharArray(city_name, sizeof(city_name));
         // get data phase
         snprintf(weather, sizeof(weather), "http://api.openweathermap.org/data/2.5/weather?q=%s&appid=%s&units=metric", city_name, api_key);
-        Serial.println(weather); // for checking purpose
+        // Serial.println(weather); // for checking purpose
         http.begin(weather);
         http_code = http.GET();
         http.getString().toCharArray(payload, sizeof(payload));
         http.end();
-        Serial.println(payload); // show the payload
+        xSemaphoreGive(httpclient_mutex); // give the mutex
+        // Serial.println(payload); // show the payload
         deserializeJson(doc, payload);
         File data = FFat.open("/current.json", "w", true);
         data.print(doc.as<String>());
@@ -52,8 +53,10 @@ void ProcessingCurrentWeather(void *pvParameters)
         xEventGroupWaitBits(GetWeather_EventGroup, DONE_GET_CURRENT_WEATHER_FLAG, pdTRUE, pdTRUE, portMAX_DELAY);
         Serial.println("Start processing current weather");
         File data = FFat.open("/current.json", "r");
-        PSRAMJsonDocument doc(4096);
+        PSRAMJsonDocument doc(1024);
         deserializeJson(doc, data.readString());
+        // Serial.println(doc.as<String>());
+        
         weather_data *current = (weather_data *)ps_malloc(sizeof(weather_data));
         current->temp = doc["main"]["temp"];
         current->temp_min = doc["main"]["temp_min"];
@@ -72,6 +75,7 @@ void ProcessingCurrentWeather(void *pvParameters)
         {
             ret = xQueueSend(current_weather_queue, current, portMAX_DELAY);
         }
+
         Serial.println("Done processing current weather");
         xEventGroupSetBits(GetWeather_EventGroup, DONE_PROCESSING_CURRENT_WEATHER_FLAG);
         taskYIELD(); // finish the task
@@ -93,6 +97,7 @@ void GetForecastWeather(void *pvParameters) // get 8-day forecast
 
         getCoordinates(&lat, &lon);
         snprintf(forecast, sizeof(forecast), "http://api.openweathermap.org/data/2.5/onecall?lat=%.6f&lon=%.6f&exclude=current,minutely,hourly,alerts&appid=%s&units=metric", lat, lon, api_key);
+        xSemaphoreTake(httpclient_mutex, portMAX_DELAY); // take the mutex
         http.begin(forecast);
         http_code = http.GET();
         http.getString().toCharArray(payload, sizeof(payload));
@@ -102,6 +107,7 @@ void GetForecastWeather(void *pvParameters) // get 8-day forecast
         data.flush(); // guarantee that the data is written to the file
         data.close();
         http.end();
+        xSemaphoreGive(httpclient_mutex); // give the mutex
 
         Serial.println("Done getting forecast weather");
         xEventGroupSetBits(WiFi_EventGroup, DONE_USING_WIFI_FLAG);
