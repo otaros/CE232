@@ -7,9 +7,9 @@ void DisplayTitle(void *pvParameters)
     {
         title_Sprite.fillScreen(TFT_BLACK);
         getLocalTime(&structTime);
-        strftime(date, sizeof(date), "%A, %d/%m/%Y, %H:%M:%S", &structTime);
+        strftime(date, sizeof(date), "%a, %d/%m/%Y, %H:%M:%S", &structTime);
         sprintf(title_text, "%s, %s", city_name, date);
-        Serial.println(title_text);
+        // Serial.println(title_text);
         title_Sprite.setCursor(0, 0);
         title_Sprite.println(title_text);
         title_Sprite.pushSprite(0, 0);
@@ -22,9 +22,11 @@ void DisplayCurrentWeather(void *pvParameters)
     char filename[10];
     char temperture[10];
     BaseType_t ret;
+    current_weather_Sprite.setTextDatum(TC_DATUM);
     for (;;)
     {
         xEventGroupWaitBits(GetData_EventGroup, DONE_PROCESSING_CURRENT_WEATHER_FLAG, pdTRUE, pdFALSE, portMAX_DELAY);
+        current_weather_Sprite.fillSprite(TFT_BLACK);
         Serial.println("Start displaying current weather");
         weather_data *data = (weather_data *)ps_malloc(sizeof(weather_data));
         ret = xQueueReceive(current_weather_queue, data, portMAX_DELAY);
@@ -32,14 +34,52 @@ void DisplayCurrentWeather(void *pvParameters)
         {
             ret = xQueueReceive(current_weather_queue, data, portMAX_DELAY);
         }
+        // 1.15 spacing for each line
         sprintf(filename, "/%s.bmp", data->icon);
         Serial.println(filename);
-        current_weather_Sprite.fillScreen(TFT_BLACK);
-        drawBmpToSprite(filename, 0, 0, &current_weather_Sprite);
-        current_weather_Sprite.setCursor(20, 70);
-        sprintf(temperture, "%.2f°C", data->temp);
-        current_weather_Sprite.println(temperture);
-        current_weather_Sprite.pushSprite(0, 50);
+        current_weather_Sprite.fillSprite(TFT_BLACK);
+
+        drawBmpToSprite(filename, 48, 0, &current_weather_Sprite);
+        current_weather_Sprite.setCursor(60, 55);
+        current_weather_Sprite.printf("%.2f°C", data->temp);
+
+        drawBmpToSprite("/thermometer.bmp", 27, 65, &current_weather_Sprite);
+        current_weather_Sprite.setCursor(40, 67);
+        current_weather_Sprite.printf("%.2f°C/%.2f°C", data->temp_min, data->temp_max);
+
+        drawBmpToSprite("/water_drop.bmp", 27, 77, &current_weather_Sprite);
+        current_weather_Sprite.setCursor(40, 79);
+        current_weather_Sprite.printf("%d%%", data->humidity);
+
+        drawBmpToSprite("/pressure.bmp", 26, 89, &current_weather_Sprite);
+        current_weather_Sprite.setCursor(40, 91);
+        current_weather_Sprite.printf("%d hPa", data->pressure);
+
+        drawBmpToSprite("/wind.bmp", 25, 101, &current_weather_Sprite);
+        current_weather_Sprite.setCursor(40, 103);
+        current_weather_Sprite.printf("%.2f km/h", data->wind_speed * 3600 / 1000);
+
+        drawBmpToSprite("/uv.bmp", 26, 113, &current_weather_Sprite);
+        if (uv < 10)
+        {
+
+            current_weather_Sprite.fillRoundRect(40, 113, 21, 11, 1, getColorUV(uv));
+        }
+        else
+        {
+            current_weather_Sprite.fillRoundRect(40, 113, 27, 11, 1, getColorUV(uv));
+        }
+        current_weather_Sprite.setTextColor(TFT_BLACK);
+        current_weather_Sprite.setCursor(40, 115);
+        current_weather_Sprite.printf("%.2f", uv);
+        current_weather_Sprite.setTextColor(TFT_WHITE);
+
+        drawBmpToSprite("/sun.bmp", 26, 125, &current_weather_Sprite);
+        current_weather_Sprite.setCursor(40, 127);
+        current_weather_Sprite.printf("%02d:%02d/%02d:%02d", hour(data->sunrise + gmtOffset_sec), minute(data->sunrise), hour(data->sunset + gmtOffset_sec), minute(data->sunset));
+
+        // Serial.printf("%d, %d\n", current_weather_Sprite.getCursorX(), current_weather_Sprite.getCursorY());
+        current_weather_Sprite.pushSprite(40, 5, TFT_BLACK);
     }
 }
 
@@ -84,7 +124,6 @@ void drawBmp(const char *filename, int16_t x, int16_t y)
 
             uint16_t padding = (4 - ((w * 3) & 3)) & 3;
             uint8_t lineBuffer[w * 3 + padding];
-            // uint8_t *lineBuffer = (uint8_t *)ps_malloc(sizeof(uint8_t) * (w * 3 + padding));
 
             for (row = 0; row < h; row++)
             {
@@ -95,9 +134,10 @@ void drawBmp(const char *filename, int16_t x, int16_t y)
                 // Convert 24 to 16 bit colours
                 for (uint16_t col = 0; col < w; col++)
                 {
-                    r = *bptr++;
-                    g = *bptr++;
+                    // bitmap file is stored in BGR format
                     b = *bptr++;
+                    g = *bptr++;
+                    r = *bptr++;
                     *tptr++ = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
                 }
 
@@ -119,7 +159,7 @@ void drawBmp(const char *filename, int16_t x, int16_t y)
 void drawBmpToSprite(const char *filename, int16_t x, int16_t y, TFT_eSprite *spr)
 {
 
-    if ((x >= tft.width()) || (y >= tft.height()))
+    if ((x >= spr->width()) || (y >= spr->height()))
         return;
 
     fs::File bmpFS;
@@ -168,9 +208,10 @@ void drawBmpToSprite(const char *filename, int16_t x, int16_t y, TFT_eSprite *sp
                 // Convert 24 to 16 bit colours
                 for (uint16_t col = 0; col < w; col++)
                 {
-                    r = *bptr++;
-                    g = *bptr++;
+                    // bitmap file is stored in BGR format
                     b = *bptr++;
+                    g = *bptr++;
+                    r = *bptr++;
                     *tptr++ = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
                 }
 
@@ -205,4 +246,28 @@ uint32_t read32(fs::File &f)
     ((uint8_t *)&result)[2] = f.read();
     ((uint8_t *)&result)[3] = f.read(); // MSB
     return result;
+}
+
+uint16_t getColorUV(double uv)
+{
+    if (uv < 3)
+    {
+        return TFT_GREEN;
+    }
+    else if (uv < 6)
+    {
+        return TFT_YELLOW;
+    }
+    else if (uv < 8)
+    {
+        return TFT_ORANGE;
+    }
+    else if (uv < 11)
+    {
+        return TFT_RED;
+    }
+    else
+    {
+        return TFT_PURPLE;
+    }
 }
