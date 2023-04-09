@@ -1,0 +1,24 @@
+{
+	"files": [
+		{
+			"path": "src/GetData.cpp",
+			"bookmarks": [
+				{
+					"line": 37,
+					"column": 32,
+					"label": ""
+				}
+			]
+		},
+		{
+			"path": "src/main.cpp",
+			"bookmarks": [
+				{
+					"line": 77,
+					"column": 12,
+					"label": ""
+				}
+			]
+		}
+	]
+}
