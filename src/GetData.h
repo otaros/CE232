@@ -12,7 +12,6 @@
 
 #include "VariableDeclaration.h"
 
-static double lat, lon;
 
 
 void GetCurrentWeather(void *pvParameters);
@@ -20,6 +19,6 @@ void ProcessingCurrentWeather(void *pvParameters);
 void GetForecastWeather(void *pvParameters);
 void ProcessingForecastWeather(void *pvParameters);
 void GetAQI(void *pvParameters);
-void getCoordinates(double *, double *);
+void GetUV(void *pvParameters);
 
 #endif // __GETDATA_H__

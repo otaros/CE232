@@ -12,31 +12,38 @@ void GetCurrentWeather(void *pvParameters)
     {
         // get location phase
         xEventGroupWaitBits(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
-        Serial.println("Start getting current weather");
         xEventGroupSetBits(WiFi_EventGroup, REQUEST_WIFI_FLAG);
         Serial.println("Requesting wifi connection (Current Weather)");
         xEventGroupWaitBits(WiFi_EventGroup, WIFI_IS_AVAILABLE_FOR_USE_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
 
-        xSemaphoreTake(coordinate_mutex, portMAX_DELAY); // take the mutex
-        getCoordinates(&lat, &lon);
-        xSemaphoreGive(coordinate_mutex); // give the mutex
+        // xSemaphoreTake(coordinate_mutex, portMAX_DELAY); // take the mutex
+        // getCoordinates(&lat, &lon);
+        // xSemaphoreGive(coordinate_mutex); // give the mutex
 
-        snprintf(location_url, sizeof(location_url), "http://api.openweathermap.org/geo/1.0/reverse?lat=%.6f&lon=%.6f&limit=1&appid=%s", lat, lon, api_key);
-        // Serial.println(location); // for checking purpose
-        http1.begin(location_url);
-        http_code = http1.GET();
-        deserializeJson(doc, http1.getString());
-        http1.end();
-        doc[0]["name"].as<String>().toCharArray(city_name, sizeof(city_name));
+        // snprintf(location_url, sizeof(location_url), "http://api.openweathermap.org/geo/1.0/reverse?lat=%.6f&lon=%.6f&limit=1&appid=%s", lat, lon, api_key);
+        // // Serial.println(location); // for checking purpose
+        // http1.begin(location_url);
+        // while (http1.GET() != HTTP_CODE_OK)
+        // {
+        //     delay(100);
+        // }
+        // deserializeJson(doc, http1.getString());
+        // http1.end();
+        // doc[0]["name"].as<String>().toCharArray(city_name, sizeof(city_name));
         // Serial.println(city_name);
-        // get data phase
-        snprintf(weather_url, sizeof(weather_url), "http://api.openweathermap.org/data/2.5/weather?q=%s&appid=%s&units=metric", city_name, api_key);
-        // Serial.println(weather); // for checking purpose
-        http1.begin(weather_url);
-        http_code = http1.GET();
-        http1.getString().toCharArray(payload, sizeof(payload));
-        http1.end();
-        Serial.println(payload); // show the payload
+        snprintf(weather_url, sizeof(weather_url), "http://api.openweathermap.org/data/2.5/weather?lat=%.6f&lon=%.6f&appid=%s&units=metric", lat, lon, api_key);
+        xSemaphoreTake(http_mutex, portMAX_DELAY); // take the mutex
+        Serial.println("Start getting current weather");
+        // Serial.println(weather_url); // for checking purpose
+        http.begin(weather_url);
+        while (http.GET() != HTTP_CODE_OK)
+        {
+            delay(100);
+        }
+        http.getString().toCharArray(payload, sizeof(payload));
+        http.end();
+        xSemaphoreGive(http_mutex); // give the mutex
+        Serial.println(payload);    // show the payload
         deserializeJson(doc, payload);
         data = FFat.open("/current.json", "w", true);
         data.print(doc.as<String>());
@@ -74,6 +81,7 @@ void ProcessingCurrentWeather(void *pvParameters)
         current->wind_speed = doc["wind"]["speed"];
         current->wind_deg = doc["wind"]["deg"];
         current->sunrise = doc["sys"]["sunrise"];
+        current->sunset = doc["sys"]["sunset"];
         doc["weather"][0]["icon"].as<String>().toCharArray(current->icon, 4);
         data.close();
 
@@ -94,25 +102,29 @@ void GetForecastWeather(void *pvParameters) // get 8-day forecast
     char payload[4096];
     PSRAMJsonDocument doc(5120);
     File data;
-    int http_code;
     for (;;)
     {
         // get data phase
         xEventGroupWaitBits(GetData_EventGroup, START_GET_FORECAST_WEATHER_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
-        Serial.println("Start getting forecast weather");
         xEventGroupSetBits(WiFi_EventGroup, REQUEST_WIFI_FLAG);
         Serial.println("Requesting wifi connection (Forecast Weather))");
         xEventGroupWaitBits(WiFi_EventGroup, WIFI_IS_AVAILABLE_FOR_USE_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
 
-        xSemaphoreTake(coordinate_mutex, portMAX_DELAY); // take the mutex
-        getCoordinates(&lat, &lon);
-        xSemaphoreGive(coordinate_mutex); // give the mutex
+        // xSemaphoreTake(coordinate_mutex, portMAX_DELAY); // take the mutex
+        // getCoordinates(&lat, &lon);
+        // xSemaphoreGive(coordinate_mutex); // give the mutex
 
         snprintf(forecast_url, sizeof(forecast_url), "http://api.openweathermap.org/data/2.5/onecall?lat=%.6f&lon=%.6f&exclude=current,minutely,hourly,alerts&appid=%s&units=metric", lat, lon, api_key);
-        http2.begin(forecast_url);
-        http_code = http2.GET();
-        http2.getString().toCharArray(payload, sizeof(payload));
-        http2.end();
+        xSemaphoreTake(http_mutex, portMAX_DELAY); // take the mutex
+        Serial.println("Start getting forecast weather");
+        http.begin(forecast_url);
+        while (http.GET() != HTTP_CODE_OK)
+        {
+            delay(100);
+        }
+        http.getString().toCharArray(payload, sizeof(payload));
+        http.end();
+        xSemaphoreGive(http_mutex); // give the mutex
         deserializeJson(doc, payload);
         data = FFat.open("/forecast.json", "w", true);
         data.print(doc.as<String>());
@@ -155,7 +167,6 @@ void GetAQI(void *pvParameters)
 {
     char aqi_url[128];
     PSRAMJsonDocument doc(1024);
-    int http_code;
     for (;;)
     {
         xEventGroupWaitBits(GetData_EventGroup, START_GET_AQI_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
@@ -164,15 +175,16 @@ void GetAQI(void *pvParameters)
         Serial.println("Requesting wifi connection (AQI)");
         xEventGroupWaitBits(WiFi_EventGroup, WIFI_IS_AVAILABLE_FOR_USE_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
 
-        xSemaphoreTake(coordinate_mutex, portMAX_DELAY); // take the mutex
-        getCoordinates(&lat, &lon);
-        xSemaphoreGive(coordinate_mutex); // give the mutex
-
         snprintf(aqi_url, sizeof(aqi_url), "http://api.openweathermap.org/data/2.5/air_pollution?lat=%.6f&lon=%.6f&appid=%s", lat, lon, api_key);
-        http3.begin(aqi_url);
-        http_code = http3.GET();
-        deserializeJson(doc, http3.getString());
-        http3.end();
+        xSemaphoreTake(http_mutex, portMAX_DELAY); // take the mutex
+        http.begin(aqi_url);
+        while (http.GET() != HTTP_CODE_OK)
+        {
+            delay(100);
+        }
+        deserializeJson(doc, http.getString());
+        http.end();
+        xSemaphoreGive(http_mutex); // give the mutex
         aqi = doc["list"][0]["main"]["aqi"];
         Serial.printf("AQI: %d\n", aqi);
 
@@ -183,12 +195,38 @@ void GetAQI(void *pvParameters)
         taskYIELD();
     }
 }
-void getCoordinates(double *lat, double *lon)
+
+void GetUV(void *pvParameters)
 {
-    // Get coordinates from GPS
-    // gps.encode(Serial1.read());
-    // *lat = gps.location.lat();
-    // *lon = gps.location.lng();
-    *lat = 10.894557;
-    *lon = 106.751430;
+    char uv_url[128];
+    PSRAMJsonDocument doc(2048);
+    for (;;)
+    {
+        xEventGroupWaitBits(GetData_EventGroup, START_GET_UV_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
+        xEventGroupSetBits(WiFi_EventGroup, REQUEST_WIFI_FLAG);
+        Serial.println("Requesting wifi connection (UV index)");
+        xEventGroupWaitBits(WiFi_EventGroup, WIFI_IS_AVAILABLE_FOR_USE_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
+
+        snprintf(uv_url, sizeof(uv_url), "http://api.openuv.io/api/v1/uv?lat=%.6f&lng=%.6f&", lat, lon);
+        xSemaphoreTake(http_mutex, portMAX_DELAY); // take the mutex
+        Serial.println("Start getting UV index");
+        http.begin(uv_url);
+        http.addHeader("x-access-token", uv_api_key);
+        http.addHeader("Content-Type", "application/json");
+        while (http.GET() != HTTP_CODE_OK)
+        {
+            delay(100);
+        }
+        deserializeJson(doc, http.getString());
+        http.end();
+        xSemaphoreGive(http_mutex); // give the mutex
+        uv = doc["result"]["uv"];
+        Serial.printf("UV index: %.2f\n", uv);
+
+        Serial.println("Done getting UV index");
+        xEventGroupClearBits(GetData_EventGroup, START_GET_UV_FLAG);
+        xEventGroupSetBits(WiFi_EventGroup, DONE_USING_WIFI_FLAG);
+        xEventGroupSetBits(GetData_EventGroup, DONE_GET_UV_FLAG);
+        taskYIELD();
+    }
 }
