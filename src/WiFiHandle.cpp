@@ -82,9 +82,10 @@ void HandleWiFi(void *pvParameters)
     for (;;)
     {
         xEventGroupWaitBits(WiFi_EventGroup, REQUEST_WIFI_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
-        bits = xEventGroupWaitBits(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_FORECAST_WEATHER_FLAG, pdFALSE, pdFALSE, 1000 / portTICK_PERIOD_MS);
-        bits = bits & (START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_FORECAST_WEATHER_FLAG);
-        count = 0;
+        delay(100);
+        bits = xEventGroupWaitBits(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_FORECAST_WEATHER_FLAG | START_GET_UV_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
+        bits = bits & (START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_FORECAST_WEATHER_FLAG | START_GET_UV_FLAG);
+        count = 0; // count numbers of tasks that use WiFi
         while (bits > 0)
         {
             count += bits & 1;
@@ -116,10 +117,10 @@ void HandleWiFi(void *pvParameters)
         while (true)
         {
             /* code */
-            xEventGroupWaitBits(WiFi_EventGroup, DONE_USING_WIFI_FLAG, pdTRUE, pdFALSE, portMAX_DELAY);
+            xEventGroupWaitBits(WiFi_EventGroup, DONE_USING_WIFI_FLAG, pdTRUE, pdFALSE, portMAX_DELAY); // after a task is done, reply to this event
             count--;
             Serial.printf("Number of tasks remain: %d\n", count);
-            if (count == 0)
+            if (count == 0) // ensure that all tasks are done
             {
                 break;
             }
