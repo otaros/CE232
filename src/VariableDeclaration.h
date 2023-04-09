@@ -4,17 +4,18 @@
 #define __VARIABLEDECLARATION_H__
 
 #include <Arduino.h>
+#include <freertos/event_groups.h>
 #include <string>
 #include "time.h"
-#include <TinyGPS++.h>
-#include <TFT_eSPI.h>
-#include <freertos/event_groups.h>
 #include <HTTPClient.h>
-
-#include "JsonPSRAMAllocator.h"
 #include <WiFi.h>
 #include <FS.h>
 #include <FFat.h>
+
+#include "JsonPSRAMAllocator.h"
+#include <TinyGPS++.h>
+#include <TFT_eSPI.h>
+#include <TimeLib.h>
 
 #define REQUEST_WIFI_FLAG (1 << 0)
 #define WIFI_IS_AVAILABLE_FOR_USE_FLAG (1 << 1)
@@ -28,16 +29,19 @@
 #define DONE_PROCESSING_FORECAST_WEATHER_FLAG (1 << 5)
 #define START_GET_AQI_FLAG (1 << 6)
 #define DONE_GET_AQI_FLAG (1 << 7)
+#define START_GET_UV_FLAG (1 << 8)
+#define DONE_GET_UV_FLAG (1 << 9)
 
 #define FORECAST_NUMS 8
 
 struct weather_data
 {
     float temp, temp_min, temp_max, feels_like;
-    float pressure, humidity;
+    uint16_t pressure;
+    uint8_t humidity;
     float wind_speed;
     uint16_t wind_deg;
-    ulong sunrise, sunset;
+    long sunrise, sunset;
     char icon[4];
 };
 
@@ -49,20 +53,23 @@ struct forecast
 };
 
 extern uint8_t aqi;
+extern double uv;
 extern char ssid[56], pass[56];
 const char ntpServer[] = "time.google.com";
-const long gmtOffset_sec = 25200; // GMT +7
+extern int gmtOffset_sec;         // GMT +7
 const int daylightOffset_sec = 0; // UTC +7
 
 const char api_key[] = "bb26bc20fc2f36129e121e0a13e23c1a";
+const char uv_api_key[] = "openuv-fltferlg7o9v4l-io";
+const char timezone_api_key[] = "RPBJWVWYLAIJ";
+const char aqi_api_key[] = "d6a711a78613e89f8257f210012b76e89d1557d8";
 
-extern HTTPClient http1;
-extern HTTPClient http2;
-extern HTTPClient http3;
+extern HTTPClient http;
 
 extern struct tm structTime;
 extern TinyGPSPlus gps;
-extern char city_name[50];
+extern char city_name[50], display_name[40];
+extern double lat, lon;
 
 extern TFT_eSPI tft;
 extern TFT_eSprite title_Sprite;
@@ -74,7 +81,7 @@ extern TaskHandle_t ProcessingCurrentWeather_Handle;
 extern TaskHandle_t GetForecastWeather_Handle;
 extern TaskHandle_t ProcessingForecastWeather_Handle;
 extern TaskHandle_t GetAQI_Handle;
-// extern TaskHandle_t GetUV_Handle;
+extern TaskHandle_t GetUV_Handle;
 extern TaskHandle_t DisplayTitle_Handle;
 extern TaskHandle_t DisplayCurrentWeather_Handle;
 
@@ -85,5 +92,6 @@ extern EventGroupHandle_t WiFi_EventGroup;
 extern EventGroupHandle_t GetData_EventGroup;
 
 extern SemaphoreHandle_t coordinate_mutex;
+extern SemaphoreHandle_t http_mutex;
 
 #endif // __VARIABLEDECLARATION_H__
