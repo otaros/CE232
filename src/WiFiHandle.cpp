@@ -85,8 +85,8 @@ void HandleWiFi(void *pvParameters)
         delay(100);
         bits = xEventGroupWaitBits(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_FORECAST_WEATHER_FLAG | START_GET_UV_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
         bits = bits & (START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_FORECAST_WEATHER_FLAG | START_GET_UV_FLAG);
-        count = 0; // count numbers of tasks that use WiFi
-        while (bits > 0)
+        count = 0;       // count numbers of tasks that use WiFi
+        while (bits > 0) // Brian Kernighan’s Algorithm
         {
             count += bits & 1;
             bits >>= 1;
@@ -167,7 +167,7 @@ void handleSave()
     unsigned long startAttemptTime = millis();
     while (WiFi.status() != WL_CONNECTED)
     {
-        if (millis() - startAttemptTime > 1000)
+        if (millis() - startAttemptTime > 2000)
         {
             tft.println("Failed to connect to WiFi, please try again");
             break;

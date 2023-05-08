@@ -507,7 +507,7 @@
                 "LOAD_FONT8=1",
                 "LOAD_GFXFF=1",
                 "SMOOTH_FONT=1",
-                "TFT_RGB_ORDER=1",
+                "TFT_RGB_ORDER=0",
                 "SPI_FREQUENCY=40000000",
                 "SPI_READ_FREQUENCY=6000000",
                 "SPI_TOUCH_FREQUENCY=2500000",

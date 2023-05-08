@@ -50,6 +50,7 @@ struct forecast
     char icon[4];
     ulong dt;
     float temp_max, temp_min;
+    uint8_t humidity;
 };
 
 extern uint8_t aqi;
@@ -74,6 +75,7 @@ extern double lat, lon;
 extern TFT_eSPI tft;
 extern TFT_eSprite title_Sprite;
 extern TFT_eSprite current_weather_Sprite;
+extern TFT_eSprite forecast_Sprite1, forecast_Sprite2, forecast_Sprite3;
 
 extern TaskHandle_t WiFi_Handle;
 extern TaskHandle_t GetCurrentWeather_Handle;
@@ -84,6 +86,9 @@ extern TaskHandle_t GetAQI_Handle;
 extern TaskHandle_t GetUV_Handle;
 extern TaskHandle_t DisplayTitle_Handle;
 extern TaskHandle_t DisplayCurrentWeather_Handle;
+extern TaskHandle_t DisplayForecastWeather_Handle;
+// extern TaskHandle_t Menu_Handle;
+// extern TaskHandle_t ErrorMonitor_Handle;
 
 extern QueueHandle_t current_weather_queue;
 extern QueueHandle_t forecast_queue;

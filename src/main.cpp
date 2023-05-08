@@ -32,6 +32,7 @@ TaskHandle_t GetForecastWeather_Handle;
 TaskHandle_t ProcessingForecastWeather_Handle;
 TaskHandle_t DisplayTitle_Handle;
 TaskHandle_t DisplayCurrentWeather_Handle;
+TaskHandle_t DisplayForecastWeather_Handle;
 TaskHandle_t GetAQI_Handle;
 TaskHandle_t GetUV_Handle;
 
@@ -78,10 +79,9 @@ void setup()
 	tft.init();
 	tft.initDMA();
 	tft.setTextWrap(true, true);
-	tft.setRotation(1);
 	tft.fillScreen(TFT_BLACK);
-	tft.setRotation(1);
 	tft.setCursor(0, 0);
+	tft.setRotation(2);
 	tft.println("System starting...");
 	delay(500);
 
@@ -108,6 +108,7 @@ void setup()
 
 	// get coordinates from GPS module
 	Serial.println("Getting coordinates...");
+	tft.println("Getting coordinates...");
 	getCoordinates(); // get coordinates from GPS module
 	Serial.printf("Coordinates: %.6f, %.6f \n", lat, lon);
 
@@ -171,7 +172,7 @@ void setup()
 
 	// create current weather sprite and load font
 	current_weather_Sprite.setColorDepth(16);
-	current_weather_Sprite.createSprite(160, 180);
+	current_weather_Sprite.createSprite(160, 150);
 	current_weather_Sprite.loadFont("Calibri-Bold-11", FFat);
 
 	GetCurrentWeather_Ticker.attach(3600, startGetCurrentWeather);			  // trigger Get Current Weather every 1 hour
@@ -190,6 +191,7 @@ void setup()
 	// display task
 	xTaskCreatePinnedToCore(DisplayTitle, "Display Title", 2048, NULL, 1, &DisplayTitle_Handle, 1);
 	xTaskCreatePinnedToCore(DisplayCurrentWeather, "Display Current Weather", 4096, NULL, 1, &DisplayCurrentWeather_Handle, 1);
+	xTaskCreatePinnedToCore(DisplayForecastWeather, "Display Forecast Weather", 5120, NULL, 1, &DisplayForecastWeather_Handle, 1);
 
 	Serial.println("Finished setup");
 	tft.println("Finished setup");
@@ -234,30 +236,43 @@ void startGetForecastWeather()
 void getCoordinates()
 {
 	// Define variables for averaging
-	/* 	int numReadings = 5; // Number of readings to take
-		double latSum = 0.0; // Sum of latitude readings
-		double lonSum = 0.0; // Sum of longitude readings
+	// int numReadings = 5; // Number of readings to take
+	// double latSum = 0.0; // Sum of latitude readings
+	// double lonSum = 0.0; // Sum of longitude readings
 
-		// Take multiple GPS readings and average them
-		for (int i = 0; i < numReadings; i++)
-		{
-			// Get coordinates from GPS
-			gps.encode(Serial1.read());
+	// // Take multiple GPS readings and average them
+	// for (int i = 0; i < numReadings; i++)
+	// {
+	// 	// Get coordinates from GPS
+	// 	while (gps.location.isValid() == false)
+	// 	{
+	// 		gps.encode(Serial1.read());
+	// 		Serial.print(gps.satellites.value());
+	// 		if(gps.location.isValid() == true)
+	// 		{
+	// 			Serial.println("GPS location is valid");
+	// 			break;
+	// 		}
+	// 		else
+	// 		{
+	// 			Serial.println("GPS location is invalid");
+	// 		}
+	// 		delay(100);
+	// 	}
+	// 	// Add latitude and longitude readings to sum
+	// 	latSum += gps.location.lat();
+	// 	lonSum += gps.location.lng();
 
-			// Add latitude and longitude readings to sum
-			latSum += gps.location.lat();
-			lonSum += gps.location.lng();
+	// 	// Wait for a short time between readings
+	// 	delay(100);
+	// }
 
-			// Wait for a short time between readings
-			delay(100);
-		}
-
-		// Calculate average latitude and longitude
-		lat = latSum / numReadings;
-		lon = lonSum / numReadings; */
-	lat = 10.894557;
-	lon = 106.751430;       
+	// // Calculate average latitude and longitude
+	// lat = latSum / numReadings;
+	// lon = lonSum / numReadings;
+	// lat = 10.894557;
+	// lon = 106.751430;
 	// London
-	// lat = 51.507351;
-	// lon = -0.127758;
+	lat = 51.507351;
+	lon = -0.127758;
 }

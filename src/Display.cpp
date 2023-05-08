@@ -78,8 +78,22 @@ void DisplayCurrentWeather(void *pvParameters)
         current_weather_Sprite.setCursor(40, 127);
         current_weather_Sprite.printf("%02d:%02d/%02d:%02d", hour(data->sunrise + gmtOffset_sec), minute(data->sunrise), hour(data->sunset + gmtOffset_sec), minute(data->sunset));
 
+        current_weather_Sprite.setCursor(40, 139);
+        current_weather_Sprite.print("AQI: ");
+        current_weather_Sprite.setTextColor(TFT_BLACK);
+        current_weather_Sprite.fillRoundRect(63, 137, 6, 11, 1, getAQIColor(aqi));
+        current_weather_Sprite.print(aqi);
+        current_weather_Sprite.setTextColor(TFT_WHITE);
+
         // Serial.printf("%d, %d\n", current_weather_Sprite.getCursorX(), current_weather_Sprite.getCursorY());
         current_weather_Sprite.pushSprite(40, 5, TFT_BLACK);
+    }
+}
+
+void DisplayForecastWeather(void *pvParameters)
+{
+    for (;;){
+        xEventGroupWaitBits(GetData_EventGroup, DONE_PROCESSING_FORECAST_WEATHER_FLAG, pdTRUE, pdFALSE, portMAX_DELAY);
     }
 }
 
@@ -269,5 +283,24 @@ uint16_t getColorUV(double uv)
     else
     {
         return TFT_PURPLE;
+    }
+}
+
+uint16_t getAQIColor(uint8_t aqi)
+{
+    switch (aqi)
+    {
+    case 1:
+        return TFT_GREEN;
+    case 2:
+        return TFT_YELLOW;
+    case 3:
+        return TFT_ORANGE;
+    case 4:
+        return TFT_RED;
+    case 5:
+        return TFT_PURPLE;
+    default:
+        return TFT_BLACK;
     }
 }
