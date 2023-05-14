@@ -6,25 +6,28 @@
 #include <freertos/FreeRTOS.h>
 #include <driver/adc.h>
 #include <esp32-hal-psram.h>
+#include <UrlEncode.h>
 
 #include "GetData.h"
 #include "VariableDeclaration.h"
 #include "WiFiHandle.h"
 #include "Display.h"
+#include "Menu.h"
 
 using namespace fs;
 
-char city_name[50], display_name[40];
+char name[50], display_name[50];
 char ssid[56], pass[56];
 double lat, lon;
-int gmtOffset_sec = 0; // GMT +7
+int gmtOffset_sec = 0;
 uint8_t aqi;
 double uv;
 
 struct tm structTime;
 
-TinyGPSPlus gps;
+// TinyGPSPlus gps;
 
+TaskHandle_t WorkingFlowControl_Handle;
 TaskHandle_t WiFi_Handle;
 TaskHandle_t GetCurrentWeather_Handle;
 TaskHandle_t ProcessingCurrentWeather_Handle;
@@ -35,10 +38,14 @@ TaskHandle_t DisplayCurrentWeather_Handle;
 TaskHandle_t DisplayForecastWeather_Handle;
 TaskHandle_t GetAQI_Handle;
 TaskHandle_t GetUV_Handle;
+TaskHandle_t ButtonMonitoring_Handle;
+TaskHandle_t MenuControl_Handle;
 
 Ticker GetCurrentWeather_Ticker;
 Ticker GetForeCastWeather_Ticker;
 
+EventGroupHandle_t WorkingFlow_EventGroup = xEventGroupCreate();
+EventGroupHandle_t CurrentFlow_EventGroup = xEventGroupCreate();
 EventGroupHandle_t WiFi_EventGroup = xEventGroupCreate();
 EventGroupHandle_t GetData_EventGroup = xEventGroupCreate();
 
@@ -51,20 +58,26 @@ QueueHandle_t forecast_queue = xQueueCreate(8, sizeof(forecast));
 TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite title_Sprite = TFT_eSprite(&tft);
 TFT_eSprite current_weather_Sprite = TFT_eSprite(&tft);
+TFT_eSprite Menu_Sprite = TFT_eSprite(&tft);
+TFT_eSprite menu_cursor_Sprite = TFT_eSprite(&tft);
 
 HTTPClient http;
 
 /*---------------------------------Prototypes-----------------------------------*/
+void WorkingFlowControl(void *pvParameters);
 void startGetCurrentWeather();
 void startGetForecastWeather();
-void getCoordinates();
 void setup()
 {
 	// put your setup code here, to run once:
+	pinMode(KEY, INPUT_PULLUP);
+	pinMode(UP_KEY, INPUT_PULLUP);
+	pinMode(DOWN_KEY, INPUT_PULLUP);
+	pinMode(LEFT_KEY, INPUT_PULLUP);
+	pinMode(RIGHT_KEY, INPUT_PULLUP);
+
 	Serial.begin(115200);
 	Serial.println("System starting...");
-	Serial1.begin(9600);
-	Serial1.setPins(4, 5); // pin for GPS module
 
 	// init psram
 	if (!psramFound())
@@ -86,7 +99,7 @@ void setup()
 	delay(500);
 
 	// mount FFat
-	if (!FFat.begin(false))
+	if (!FFat.begin())
 	{
 		Serial.println("FFat Mount Failed");
 		ESP.restart();
@@ -107,10 +120,11 @@ void setup()
 	delay(500);
 
 	// get coordinates from GPS module
-	Serial.println("Getting coordinates...");
-	tft.println("Getting coordinates...");
-	getCoordinates(); // get coordinates from GPS module
+	Serial.println("Getting location...");
+	tft.println("Getting location...");
+	getLocation(); // get coordinates from GPS module
 	Serial.printf("Coordinates: %.6f, %.6f \n", lat, lon);
+	Serial.printf("City name: %s\n", name);
 
 	PSRAMJsonDocument doc(1024);
 
@@ -143,28 +157,6 @@ void setup()
 	tft.println("Time synced");
 	delay(500);
 
-	// getting city name
-	Serial.println("Getting city name...");
-	tft.println("Getting city name...");
-	char location_url[128];
-	snprintf(location_url, sizeof(location_url), "http://api.openweathermap.org/geo/1.0/reverse?lat=%.6f&lon=%.6f&limit=1&appid=%s", lat, lon, api_key);
-	// Serial.println(location); // for checking purpose
-	http.begin(location_url);
-	while (http.GET() != HTTP_CODE_OK)
-	{
-		delay(100);
-	}
-	deserializeJson(doc, http.getString());
-	http.end();
-	doc[0]["name"].as<String>().toCharArray(city_name, sizeof(city_name));
-	strcpy(display_name, city_name); // copy city_name to display_city_name (for display purpose
-	// remove the word "City" in the city name to ensure the title fits the screen
-	char *pos = strstr(display_name, " City"); // copy city_name to display_city_name (for display purpose)
-	if (pos != nullptr)
-	{
-		memmove(pos, pos + strlen(" City"), strlen(pos + strlen(" City")) + 1);
-	}
-	Serial.println("City name: " + String(display_name)); // after removing the word "City"
 	// create title sprite and load font
 	title_Sprite.setColorDepth(16);
 	title_Sprite.createSprite(240, 11);
@@ -175,11 +167,22 @@ void setup()
 	current_weather_Sprite.createSprite(160, 150);
 	current_weather_Sprite.loadFont("Calibri-Bold-11", FFat);
 
+	// create menu sprite and load font
+	Menu_Sprite.setColorDepth(16);
+	Menu_Sprite.createSprite(225, 320);
+	Menu_Sprite.loadFont("Calibri-Bold-11", FFat);
+
+	// create menu cursor sprite
+	menu_cursor_Sprite.setColorDepth(16);
+	menu_cursor_Sprite.createSprite(15, 320);
+
 	GetCurrentWeather_Ticker.attach(3600, startGetCurrentWeather);			  // trigger Get Current Weather every 1 hour
 	GetForeCastWeather_Ticker.attach(24 * 3600 * 7, startGetForecastWeather); // trigger Get Forecast Weather every 7 days
 
+	// control working flow
+	xTaskCreatePinnedToCore(WorkingFlowControl, "WorkingFlowControl", 2048, NULL, 2, &WorkingFlowControl_Handle, 0);
 	// wifi handle task
-	xTaskCreatePinnedToCore(HandleWiFi, "WiFi_Handle", 3072, NULL, 1, &WiFi_Handle, 0);
+	xTaskCreatePinnedToCore(HandleWiFi, "WiFi_Handle", 3072, NULL, 2, &WiFi_Handle, 0);
 	// get data task
 	xTaskCreatePinnedToCore(GetCurrentWeather, "GetCurrentWeather", 4096, NULL, 1, &GetCurrentWeather_Handle, 0);
 	xTaskCreatePinnedToCore(GetForecastWeather, "GetForecastWeather", 8192, NULL, 1, &GetForecastWeather_Handle, 0);
@@ -192,19 +195,90 @@ void setup()
 	xTaskCreatePinnedToCore(DisplayTitle, "Display Title", 2048, NULL, 1, &DisplayTitle_Handle, 1);
 	xTaskCreatePinnedToCore(DisplayCurrentWeather, "Display Current Weather", 4096, NULL, 1, &DisplayCurrentWeather_Handle, 1);
 	xTaskCreatePinnedToCore(DisplayForecastWeather, "Display Forecast Weather", 5120, NULL, 1, &DisplayForecastWeather_Handle, 1);
+	// check button state
+	xTaskCreatePinnedToCore(ButtonMonitoring, "Button Monitoring", 2048, NULL, 1, &ButtonMonitoring_Handle, 1);
+	xTaskCreatePinnedToCore(MenuControl, "Menu Control", 2048, NULL, 1, &MenuControl_Handle, 1);
+
+	// Serial.println("Suspending all tasks");
+	vTaskSuspend(GetCurrentWeather_Handle);
+	vTaskSuspend(GetForecastWeather_Handle);
+	vTaskSuspend(GetAQI_Handle);
+	vTaskSuspend(GetUV_Handle);
+	vTaskSuspend(ProcessingCurrentWeather_Handle);
+	vTaskSuspend(ProcessingForecastWeather_Handle);
+	vTaskSuspend(DisplayTitle_Handle);
 
 	Serial.println("Finished setup");
 	tft.println("Finished setup");
 	delay(500);
 	tft.fillScreen(TFT_BLACK); // clear display
-	tft.unloadFont();
+	// tft.unloadFont();
 
-	xEventGroupSetBits(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_UV_FLAG); // first run
+	xEventGroupSetBits(WorkingFlow_EventGroup, MAIN); // first run
+	// xEventGroupSetBits(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_UV_FLAG); // first run
+	xEventGroupSetBits(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG); // first run
 }
 
 void loop()
 {
 	// put your main code here, to run repeatedly:
+}
+
+void WorkingFlowControl(void *pvParameters)
+{
+	EventBits_t event;
+	for (;;)
+	{
+		event = xEventGroupWaitBits(WorkingFlow_EventGroup, MAIN | MENU | THREE_HOURS_FORECAST | INPUT_API | INPUT_WIFI_CREDENTIALS, pdTRUE, pdFALSE, portMAX_DELAY);
+		switch (event)
+		{
+		case MAIN:
+			if (xEventGroupGetBits(CurrentFlow_EventGroup) == MAIN)
+			{
+				break;
+			}
+			tft.fillScreen(TFT_BLACK);
+			vTaskResume(GetCurrentWeather_Handle);
+			vTaskResume(GetForecastWeather_Handle);
+			vTaskResume(GetAQI_Handle);
+			vTaskResume(GetUV_Handle);
+			vTaskResume(ProcessingCurrentWeather_Handle);
+			vTaskResume(ProcessingForecastWeather_Handle);
+			vTaskResume(DisplayTitle_Handle);
+			vTaskResume(DisplayCurrentWeather_Handle);
+			vTaskResume(DisplayForecastWeather_Handle);
+			xEventGroupSetBits(CurrentFlow_EventGroup, MAIN);
+			break;
+		case MENU:
+			if (xEventGroupGetBits(CurrentFlow_EventGroup) == MENU)
+			{
+				break;
+			}
+			tft.fillScreen(TFT_BLACK);
+			vTaskSuspend(DisplayTitle_Handle);
+			vTaskSuspend(DisplayCurrentWeather_Handle);
+			vTaskSuspend(DisplayForecastWeather_Handle);
+
+			tft.println("Please wait for task to finish");
+			while (xEventGroupGetBits(GetData_EventGroup) & (START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_UV_FLAG))
+			{
+				delay(100);
+			}
+			tft.fillScreen(TFT_BLACK);
+
+			vTaskSuspend(GetCurrentWeather_Handle);
+			vTaskSuspend(GetForecastWeather_Handle);
+			vTaskSuspend(GetAQI_Handle);
+			vTaskSuspend(GetUV_Handle);
+			vTaskSuspend(ProcessingCurrentWeather_Handle);
+			vTaskSuspend(ProcessingForecastWeather_Handle);
+			displayMenu();
+			xEventGroupSetBits(CurrentFlow_EventGroup, MENU);
+			break;
+		default:
+			break;
+		}
+	}
 }
 
 void startGetCurrentWeather()
@@ -233,46 +307,50 @@ void startGetForecastWeather()
 	}
 }
 
-void getCoordinates()
+void getLocation()
 {
-	// Define variables for averaging
-	// int numReadings = 5; // Number of readings to take
-	// double latSum = 0.0; // Sum of latitude readings
-	// double lonSum = 0.0; // Sum of longitude readings
+	// check NVS data if location is set -> get address from NVS -> get coordinates from address
+	// if not set -> openwebserver for user to input address -> store address to NVS -> get coordinates from address
+	// if NVS data is invalid -> openwebserver for user to input address -> store address to NVS -> get coordinates from address
+	char raw_address[] = "Berlin, Germany";
+	PSRAMJsonDocument doc(4096);
+	char url[2048];
+	char address[512];
+	urlEncode(raw_address).toCharArray(address, sizeof(address));
+	snprintf(url, sizeof(url), "http://api.opencagedata.com/geocode/v1/json?q=%s&key=%s&limit=1", address, opencage_api_key);
+	Serial.println(url);
+	http.begin(url);
+	while (http.GET() != HTTP_CODE_OK)
+	{
+		delay(100);
+	}
+	deserializeJson(doc, http.getString());
+	Serial.println(doc.as<String>());
+	http.end();
+	lat = doc["results"][0]["geometry"]["lat"].as<double>();
+	lon = doc["results"][0]["geometry"]["lng"].as<double>();
 
-	// // Take multiple GPS readings and average them
-	// for (int i = 0; i < numReadings; i++)
-	// {
-	// 	// Get coordinates from GPS
-	// 	while (gps.location.isValid() == false)
-	// 	{
-	// 		gps.encode(Serial1.read());
-	// 		Serial.print(gps.satellites.value());
-	// 		if(gps.location.isValid() == true)
-	// 		{
-	// 			Serial.println("GPS location is valid");
-	// 			break;
-	// 		}
-	// 		else
-	// 		{
-	// 			Serial.println("GPS location is invalid");
-	// 		}
-	// 		delay(100);
-	// 	}
-	// 	// Add latitude and longitude readings to sum
-	// 	latSum += gps.location.lat();
-	// 	lonSum += gps.location.lng();
+	if (!doc["results"][0]["components"].containsKey("city"))
+	{
+		doc["results"][0]["components"]["county"].as<String>().toCharArray(name, sizeof(name));
+		strcpy(display_name, name); // copy name to display_city_name (for display purpose
+		// remove the word "City" in the city name to ensure the title fit the screen
+		char *pos = strstr(display_name, " District"); // copy name to display_city_name (for display purpose)
+		if (pos != nullptr)
+		{
+			memmove(pos, pos + strlen(" District"), strlen(pos + strlen(" District")) + 1);
+		}
+	}
+	else
+	{
 
-	// 	// Wait for a short time between readings
-	// 	delay(100);
-	// }
-
-	// // Calculate average latitude and longitude
-	// lat = latSum / numReadings;
-	// lon = lonSum / numReadings;
-	// lat = 10.894557;
-	// lon = 106.751430;
-	// London
-	lat = 51.507351;
-	lon = -0.127758;
+		doc["results"][0]["components"]["city"].as<String>().toCharArray(name, sizeof(name));
+		strcpy(display_name, name); // copy name to display_city_name (for display purpose
+		// remove the word "City" in the city name to ensure the title fits the screen
+		char *pos = strstr(display_name, " City"); // copy name to display_city_name (for display purpose)
+		if (pos != nullptr)
+		{
+			memmove(pos, pos + strlen(" City"), strlen(pos + strlen(" City")) + 1);
+		}
+	}
 }

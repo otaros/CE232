@@ -9,13 +9,10 @@ static char date[40];
 
 uint16_t getColorUV(double uv);
 uint16_t getAQIColor(uint8_t aqi);
-uint16_t read16(fs::File &f);
-uint32_t read32(fs::File &f);
 
 void DisplayTitle(void *pvParameters);
 void DisplayCurrentWeather(void *pvParameters);
 void DisplayForecastWeather(void *pvParameters);
-void drawBmp(const char *filename, int16_t x, int16_t y);
-void drawBmpToSprite(const char *filename, int16_t x, int16_t y, TFT_eSprite *spr);
+void displayMenu();
 
 #endif // __DISPLAY_H__
