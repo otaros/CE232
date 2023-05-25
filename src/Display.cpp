@@ -31,6 +31,11 @@ void DisplayCurrentWeather(void *pvParameters)
         current_weather_Sprite.fillSprite(TFT_BLACK);
         Serial.println("Start displaying current weather");
 
+        if (newScreen)
+        {
+            newScreen = false;
+            continue;
+        }
         if (uxQueueMessagesWaiting(current_weather_queue) != 0)
         {
             ret = xQueueReceive(current_weather_queue, data, portMAX_DELAY);

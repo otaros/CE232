@@ -4,6 +4,7 @@
 #define __MENU_H__
 
 #include <VariableDeclaration.h>
+#include <WiFiHandle.h>
 
 extern int8_t menu_index;
 

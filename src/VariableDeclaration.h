@@ -11,6 +11,7 @@
 #include <WiFi.h>
 #include <FS.h>
 #include <FFat.h>
+#include <ArduinoNvs.h>
 
 #include "JsonPSRAMAllocator.h"
 #include <TFT_eSPI.h>
@@ -38,6 +39,10 @@
 #define DONE_GET_AQI_FLAG (1 << 7)
 #define START_GET_UV_FLAG (1 << 8)
 #define DONE_GET_UV_FLAG (1 << 9)
+#define START_GET_3HOURS_FORECAST_FLAG (1 << 10)
+#define DONE_GET_3HOURS_FORECAST_FLAG (1 << 11)
+#define DONE_PROCESSING_3HOURS_FORECAST_FLAG (1 << 12)
+#define GET_LOCATION_FLAG (1 << 13)
 
 #define FORECAST_NUMS 8
 
@@ -49,7 +54,8 @@
 #define MENU (1 << 1)
 #define THREE_HOURS_FORECAST (1 << 2)
 #define INPUT_API (1 << 3)
-#define INPUT_WIFI_CREDENTIALS (1 << 4)
+#define CHANGE_LOCATION (1 << 4)
+#define INPUT_WIFI_CREDENTIALS (1 << 5)
 
 struct weather_data
 {
@@ -72,10 +78,12 @@ struct forecast
 
 extern uint8_t aqi;
 extern double uv;
-extern char ssid[56], pass[56];
+extern char ssid[56], pass[56], raw_address[64];
 const char ntpServer[] = "time.google.com";
 extern int gmtOffset_sec; // GMT +7
 const int daylightOffset_sec = 0;
+
+extern bool newScreen;
 
 const char openweather_api_key[] = "bb26bc20fc2f36129e121e0a13e23c1a";
 const char uv_api_key[] = "openuv-fltferlg7o9v4l-io";
@@ -86,7 +94,6 @@ const char opencage_api_key[] = "28e7dd0fe11645a08093c3017ff06468";
 extern HTTPClient http;
 
 extern struct tm structTime;
-// extern TinyGPSPlus gps;
 extern char name[], display_name[];
 extern double lat, lon;
 
@@ -110,10 +117,12 @@ extern TaskHandle_t DisplayCurrentWeather_Handle;
 extern TaskHandle_t DisplayForecastWeather_Handle;
 extern TaskHandle_t DisplayMenu_Handle;
 extern TaskHandle_t MenuControl_Handle;
+extern TaskHandle_t ThreeHoursForecast_Handle;
 // extern TaskHandle_t ErrorMonitor_Handle;
 
 extern QueueHandle_t current_weather_queue;
 extern QueueHandle_t forecast_queue;
+extern QueueHandle_t three_hours_forecast_queue;
 
 extern EventGroupHandle_t WiFi_EventGroup;
 extern EventGroupHandle_t GetData_EventGroup;
@@ -124,5 +133,4 @@ extern SemaphoreHandle_t coordinate_mutex;
 extern SemaphoreHandle_t http_mutex;
 
 // function prototypes
-void getLocation();
 #endif // __VARIABLEDECLARATION_H__

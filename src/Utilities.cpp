@@ -7,7 +7,7 @@ BUTTON_STATE getButtonState()
         ulong start = millis();
         while (digitalRead(KEY) == LOW)
         {
-            if (millis() - start > 500 && digitalRead(KEY) == HIGH)
+            if (millis() - start > 400 && digitalRead(KEY) == HIGH)
             {
                 return KEY_HOLD;
             }

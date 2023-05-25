@@ -7,6 +7,7 @@
 #include <driver/adc.h>
 #include <esp32-hal-psram.h>
 #include <UrlEncode.h>
+#include <ArduinoNVS.h>
 
 #include "GetData.h"
 #include "VariableDeclaration.h"
@@ -17,11 +18,12 @@
 using namespace fs;
 
 char name[50], display_name[50];
-char ssid[56], pass[56];
+char ssid[56], pass[56], raw_address[64];
 double lat, lon;
 int gmtOffset_sec = 0;
 uint8_t aqi;
 double uv;
+bool newScreen = false;
 
 struct tm structTime;
 
@@ -52,8 +54,9 @@ EventGroupHandle_t GetData_EventGroup = xEventGroupCreate();
 SemaphoreHandle_t coordinate_mutex = xSemaphoreCreateMutex();
 SemaphoreHandle_t http_mutex = xSemaphoreCreateMutex();
 
-QueueHandle_t current_weather_queue = xQueueCreate(2, sizeof(weather_data));
+QueueHandle_t current_weather_queue = xQueueCreate(1, sizeof(weather_data));
 QueueHandle_t forecast_queue = xQueueCreate(8, sizeof(forecast));
+QueueHandle_t three_hours_forecast_queue = xQueueCreate(6, sizeof(forecast));
 
 TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite title_Sprite = TFT_eSprite(&tft);
@@ -67,6 +70,8 @@ HTTPClient http;
 void WorkingFlowControl(void *pvParameters);
 void startGetCurrentWeather();
 void startGetForecastWeather();
+void getLocation(char *raw_address, double &lat, double &lon);
+void getTimeZone(double lat, double lon, int &gmtOffset_sec);
 void setup()
 {
 	// put your setup code here, to run once:
@@ -79,6 +84,7 @@ void setup()
 	Serial.begin(115200);
 	Serial.println("System starting...");
 
+	NVS.begin();
 	// init psram
 	if (!psramFound())
 	{
@@ -119,40 +125,57 @@ void setup()
 	tft.println("WiFi connected to " + String(ssid));
 	delay(500);
 
-	// get coordinates from GPS module
+	// get coordinates from address
 	Serial.println("Getting location...");
 	tft.println("Getting location...");
-	getLocation(); // get coordinates from GPS module
+	if (NVS.getString("address") == "") // if address is not stored in NVS, get address from user
+	{
+		uint8_t mac[6];
+		WiFi.macAddress(mac);
+		char ap_ssid[32];
+		sprintf(ap_ssid, "Weather Station %02X%02X%02X", mac[3], mac[4], mac[5]);
+		inputLocation(ap_ssid, "");
+		tft.println("Please input your location");
+		tft.printf("Connect to WiFi: %s\n", ap_ssid);
+		tft.printf("Access to this IP: %s\n", WiFi.softAPIP().toString().c_str());
+		while (true)
+		{
+			server.handleClient();
+			if (server.hasArg("address"))
+			{
+				server.arg("address").toCharArray(raw_address, sizeof(raw_address));
+				server.stop();
+				NVS.setString("address", raw_address);
+				WiFi.mode(WIFI_STA); // return to normal mode
+				WiFi.begin(ssid, pass);
+				break;
+			}
+		}
+	}
+	else
+	{
+		NVS.getString("address").toCharArray(raw_address, sizeof(raw_address));
+	}
+	Serial.printf("Address: %s\n", raw_address);
+
+	getLocation(raw_address, lat, lon); // get coordinates from GPS module
 	Serial.printf("Coordinates: %.6f, %.6f \n", lat, lon);
 	Serial.printf("City name: %s\n", name);
 
-	PSRAMJsonDocument doc(1024);
-
 	// getting time zone
-	char time_zone_url[128];
 	Serial.println("Getting time zone...");
 	tft.println("Getting time zone...");
-	snprintf(time_zone_url, sizeof(time_zone_url), "http://api.timezonedb.com/v2.1/get-time-zone?key=%s&format=json&by=position&lat=%.6f&lng=%.6f", timezone_api_key, lat, lon);
-	http.begin(time_zone_url);
-	while (http.GET() != HTTP_CODE_OK)
-	{
-		delay(100);
-	}
-	deserializeJson(doc, http.getString());
-	http.end();
-	gmtOffset_sec = doc["gmtOffset"].as<int>();
+	getTimeZone(lat, lon, gmtOffset_sec);
 	delay(500);
 
 	// sync time with the internet
 	configTime(gmtOffset_sec, daylightOffset_sec, ntpServer); // sync time with the internet
 	tft.print("Waiting for time to sync...");
-	Serial.print("Waiting for time to sync...");
+	Serial.println("Waiting for time to sync...");
 	while (!getLocalTime(&structTime, 500))
 	{
 		delay(10);
 	}
-	Serial.println("");
-	tft.println("");
 	Serial.println("Time synced");
 	tft.println("Time synced");
 	delay(500);
@@ -180,24 +203,24 @@ void setup()
 	GetForeCastWeather_Ticker.attach(24 * 3600 * 7, startGetForecastWeather); // trigger Get Forecast Weather every 7 days
 
 	// control working flow
-	xTaskCreatePinnedToCore(WorkingFlowControl, "WorkingFlowControl", 2048, NULL, 2, &WorkingFlowControl_Handle, 0);
+	xTaskCreatePinnedToCore(WorkingFlowControl, "Working Flow Control", 5120, NULL, 2, &WorkingFlowControl_Handle, 0);
 	// wifi handle task
-	xTaskCreatePinnedToCore(HandleWiFi, "WiFi_Handle", 3072, NULL, 2, &WiFi_Handle, 0);
+	xTaskCreatePinnedToCore(HandleWiFi, "WiFi Handle", 3072, NULL, 2, &WiFi_Handle, 0);
 	// get data task
-	xTaskCreatePinnedToCore(GetCurrentWeather, "GetCurrentWeather", 4096, NULL, 1, &GetCurrentWeather_Handle, 0);
-	xTaskCreatePinnedToCore(GetForecastWeather, "GetForecastWeather", 8192, NULL, 1, &GetForecastWeather_Handle, 0);
-	xTaskCreatePinnedToCore(GetAQI, "GetAQI", 3072, NULL, 1, &GetAQI_Handle, 0);
-	xTaskCreatePinnedToCore(GetUV, "GetUV", 3072, NULL, 1, &GetUV_Handle, 0);
+	xTaskCreatePinnedToCore(GetCurrentWeather, "Get Current Weather", 4096, NULL, 1, &GetCurrentWeather_Handle, 0);
+	xTaskCreatePinnedToCore(GetForecastWeather, "Get Forecast Weather", 8192, NULL, 1, &GetForecastWeather_Handle, 0);
+	xTaskCreatePinnedToCore(GetAQI, "Get AQI", 3072, NULL, 1, &GetAQI_Handle, 0);
+	xTaskCreatePinnedToCore(GetUV, "Get UV", 3072, NULL, 1, &GetUV_Handle, 0);
 	// processing task
-	xTaskCreatePinnedToCore(ProcessingCurrentWeather, "ProcessingCurrentWeather", 5120, NULL, 1, &ProcessingCurrentWeather_Handle, 0);
-	xTaskCreatePinnedToCore(ProcessingForecastWeather, "ProcessingForecastWeather", 5120, NULL, 1, &ProcessingForecastWeather_Handle, 0);
+	xTaskCreatePinnedToCore(ProcessingCurrentWeather, "Processing Current Weather", 5120, NULL, 1, &ProcessingCurrentWeather_Handle, 0);
+	xTaskCreatePinnedToCore(ProcessingForecastWeather, "Processing Forecast Weather", 5120, NULL, 1, &ProcessingForecastWeather_Handle, 0);
 	// display task
 	xTaskCreatePinnedToCore(DisplayTitle, "Display Title", 2048, NULL, 1, &DisplayTitle_Handle, 1);
 	xTaskCreatePinnedToCore(DisplayCurrentWeather, "Display Current Weather", 4096, NULL, 1, &DisplayCurrentWeather_Handle, 1);
 	xTaskCreatePinnedToCore(DisplayForecastWeather, "Display Forecast Weather", 5120, NULL, 1, &DisplayForecastWeather_Handle, 1);
 	// check button state
-	xTaskCreatePinnedToCore(ButtonMonitoring, "Button Monitoring", 2048, NULL, 1, &ButtonMonitoring_Handle, 1);
-	xTaskCreatePinnedToCore(MenuControl, "Menu Control", 2048, NULL, 1, &MenuControl_Handle, 1);
+	xTaskCreatePinnedToCore(ButtonMonitoring, "Button Monitoring", 2560, NULL, 2, &ButtonMonitoring_Handle, 0);
+	xTaskCreatePinnedToCore(MenuControl, "Menu Control", 4096, NULL, 1, &MenuControl_Handle, 1);
 
 	// Serial.println("Suspending all tasks");
 	vTaskSuspend(GetCurrentWeather_Handle);
@@ -214,9 +237,9 @@ void setup()
 	tft.fillScreen(TFT_BLACK); // clear display
 	// tft.unloadFont();
 
-	xEventGroupSetBits(WorkingFlow_EventGroup, MAIN); // first run
 	// xEventGroupSetBits(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_UV_FLAG); // first run
 	xEventGroupSetBits(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG); // first run
+	xEventGroupSetBits(WorkingFlow_EventGroup, MAIN);											 // first run
 }
 
 void loop()
@@ -229,7 +252,7 @@ void WorkingFlowControl(void *pvParameters)
 	EventBits_t event;
 	for (;;)
 	{
-		event = xEventGroupWaitBits(WorkingFlow_EventGroup, MAIN | MENU | THREE_HOURS_FORECAST | INPUT_API | INPUT_WIFI_CREDENTIALS, pdTRUE, pdFALSE, portMAX_DELAY);
+		event = xEventGroupWaitBits(WorkingFlow_EventGroup, MAIN | MENU | THREE_HOURS_FORECAST | INPUT_API | INPUT_WIFI_CREDENTIALS | CHANGE_LOCATION, pdTRUE, pdFALSE, portMAX_DELAY);
 		switch (event)
 		{
 		case MAIN:
@@ -249,6 +272,7 @@ void WorkingFlowControl(void *pvParameters)
 			vTaskResume(DisplayForecastWeather_Handle);
 			xEventGroupSetBits(CurrentFlow_EventGroup, MAIN);
 			break;
+		/* ----------------------- */
 		case MENU:
 			if (xEventGroupGetBits(CurrentFlow_EventGroup) == MENU)
 			{
@@ -275,6 +299,71 @@ void WorkingFlowControl(void *pvParameters)
 			displayMenu();
 			xEventGroupSetBits(CurrentFlow_EventGroup, MENU);
 			break;
+		/* ----------------------- */
+		case THREE_HOURS_FORECAST:
+			if (xEventGroupGetBits(CurrentFlow_EventGroup) == THREE_HOURS_FORECAST)
+			{
+				break;
+			}
+			// tft.fillScreen(TFT_BLACK);
+
+			xEventGroupSetBits(CurrentFlow_EventGroup, THREE_HOURS_FORECAST);
+			break;
+		/* ----------------------- */
+		case CHANGE_LOCATION:
+			if (xEventGroupGetBits(CurrentFlow_EventGroup) == CHANGE_LOCATION)
+			{
+				break;
+			}
+			tft.fillScreen(TFT_BLACK);
+			tft.setCursor(0, 0);
+			uint8_t mac[6];
+			WiFi.macAddress(mac);
+			char ap_ssid[32];
+			sprintf(ap_ssid, "Weather Station %02X%02X%02X", mac[3], mac[4], mac[5]);
+			inputLocation(ap_ssid, "");
+			tft.println("Please input your new location");
+			tft.printf("Connect to WiFi: %s\n", ap_ssid);
+			tft.printf("Access to this IP: %s\n", WiFi.softAPIP().toString().c_str());
+			while (true)
+			{
+				server.handleClient();
+				if (server.hasArg("address"))
+				{
+					server.arg("address").toCharArray(raw_address, sizeof(raw_address));
+					NVS.setString("address", raw_address);
+					server.stop();
+					WiFi.disconnect();
+					WiFi.mode(WIFI_OFF);
+					break;
+				}
+			}
+
+			delay(2);
+			xEventGroupSetBits(GetData_EventGroup, GET_LOCATION_FLAG);
+			xEventGroupSetBits(WiFi_EventGroup, REQUEST_WIFI_FLAG);
+			getLocation(raw_address, lat, lon);						  // call to get new location
+			getTimeZone(lat, lon, gmtOffset_sec); // call to get new time zone
+			configTime(gmtOffset_sec, daylightOffset_sec, ntpServer); // resync time
+			tft.println("Waiting for time to resync...");
+			Serial.println("Waiting for time to resync...");
+			while (!getLocalTime(&structTime, 500))
+			{
+				delay(10);
+			}
+			xEventGroupSetBits(WiFi_EventGroup, DONE_USING_WIFI_FLAG);
+			xEventGroupSetBits(CurrentFlow_EventGroup, CHANGE_LOCATION);
+			xEventGroupClearBits(CurrentFlow_EventGroup, 0xFFFF);
+			// xEventGroupSetBits(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_UV_FLAG);
+			newScreen = true; // force to update to new screen
+			xEventGroupSetBits(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG);
+			xEventGroupSetBits(WorkingFlow_EventGroup, MAIN);
+			break;
+		/* ----------------------- */
+		case INPUT_API:
+			xEventGroupSetBits(CurrentFlow_EventGroup, INPUT_API);
+			break;
+		/* ----------------------- */
 		default:
 			break;
 		}
@@ -307,25 +396,21 @@ void startGetForecastWeather()
 	}
 }
 
-void getLocation()
+void getLocation(char *raw_address, double &lat, double &lon)
 {
-	// check NVS data if location is set -> get address from NVS -> get coordinates from address
-	// if not set -> openwebserver for user to input address -> store address to NVS -> get coordinates from address
-	// if NVS data is invalid -> openwebserver for user to input address -> store address to NVS -> get coordinates from address
-	char raw_address[] = "Berlin, Germany";
 	PSRAMJsonDocument doc(4096);
 	char url[2048];
 	char address[512];
 	urlEncode(raw_address).toCharArray(address, sizeof(address));
 	snprintf(url, sizeof(url), "http://api.opencagedata.com/geocode/v1/json?q=%s&key=%s&limit=1", address, opencage_api_key);
-	Serial.println(url);
+	// Serial.println(url);
 	http.begin(url);
 	while (http.GET() != HTTP_CODE_OK)
 	{
 		delay(100);
 	}
 	deserializeJson(doc, http.getString());
-	Serial.println(doc.as<String>());
+	// Serial.println(doc.as<String>());
 	http.end();
 	lat = doc["results"][0]["geometry"]["lat"].as<double>();
 	lon = doc["results"][0]["geometry"]["lng"].as<double>();
@@ -343,7 +428,6 @@ void getLocation()
 	}
 	else
 	{
-
 		doc["results"][0]["components"]["city"].as<String>().toCharArray(name, sizeof(name));
 		strcpy(display_name, name); // copy name to display_city_name (for display purpose
 		// remove the word "City" in the city name to ensure the title fits the screen
@@ -353,4 +437,20 @@ void getLocation()
 			memmove(pos, pos + strlen(" City"), strlen(pos + strlen(" City")) + 1);
 		}
 	}
+	xEventGroupClearBits(GetData_EventGroup, GET_LOCATION_FLAG);
+}
+
+void getTimeZone(double lat, double lon, int &gmtOffset_sec)
+{
+	PSRAMJsonDocument doc(1024);
+	char time_zone_url[128];
+	snprintf(time_zone_url, sizeof(time_zone_url), "http://api.timezonedb.com/v2.1/get-time-zone?key=%s&format=json&by=position&lat=%.6f&lng=%.6f", timezone_api_key, lat, lon);
+	http.begin(time_zone_url);
+	while (http.GET() != HTTP_CODE_OK)
+	{
+		delay(100);
+	}
+	deserializeJson(doc, http.getString());
+	http.end();
+	gmtOffset_sec = doc["gmtOffset"].as<int>();
 }

@@ -44,7 +44,7 @@ void connectToWiFi()
             WiFi.macAddress(mac);
             char ap_ssid[32];
             sprintf(ap_ssid, "Weather Station %02X%02X%02X", mac[3], mac[4], mac[5]);
-            openwebserver(ap_ssid, "");
+            openWebSever_WiFiCredentials(ap_ssid, "");
             tft.println("Not found WiFi credentials");
             tft.println("Please connect to WiFi: \"" + String(ap_ssid) + "\"");
             tft.println("And access to this IP: \"" + WiFi.softAPIP().toString() + "\"");
@@ -83,8 +83,8 @@ void HandleWiFi(void *pvParameters)
     {
         xEventGroupWaitBits(WiFi_EventGroup, REQUEST_WIFI_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
         delay(100);
-        bits = xEventGroupWaitBits(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_FORECAST_WEATHER_FLAG | START_GET_UV_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
-        bits = bits & (START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_FORECAST_WEATHER_FLAG | START_GET_UV_FLAG);
+        bits = xEventGroupWaitBits(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_FORECAST_WEATHER_FLAG | START_GET_UV_FLAG | START_GET_3HOURS_FORECAST_FLAG | GET_LOCATION_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
+        bits = bits & (START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_FORECAST_WEATHER_FLAG | START_GET_UV_FLAG | GET_LOCATION_FLAG);
         count = 0;       // count numbers of tasks that use WiFi
         while (bits > 0) // Brian Kernighan’s Algorithm
         {
@@ -134,26 +134,26 @@ void HandleWiFi(void *pvParameters)
     }
 }
 
-void openwebserver(const char *ssid, const char *pass)
+void openWebSever_WiFiCredentials(const char *ssid, const char *pass)
 {
     WiFi.disconnect();
     WiFi.mode(WIFI_AP_STA);
 
     WiFi.softAP(ssid, pass);
 
-    createwebserver();
+    server.on("/", handleWiFiInput);
+    server.on("/save", handleWiFiSave);
     server.begin();
 }
 
-void handleRoot()
+void handleWiFiInput()
 {
-    File file = FFat.open("/index.html", "r"); // Open the file
-    String html = file.readString();           // Read the file
-    file.close();                              // Close the file
-    server.send(200, "text/html", html);
+    File file = FFat.open("/credentials.html", "r"); // Open the file                // Read the file
+    server.send(200, "text/html", file.readString());
+    file.close(); // Close the file
 }
 
-void handleSave()
+void handleWiFiSave()
 {
     server.arg("ssid").toCharArray(ssid, sizeof(ssid));
     server.arg("pass").toCharArray(pass, sizeof(pass));
@@ -176,8 +176,21 @@ void handleSave()
     }
 }
 
-void createwebserver()
+void handleLocationInput()
 {
-    server.on("/", handleRoot);
-    server.on("/save", handleSave);
+    File file = FFat.open("/location.html", "r");
+    server.send(200, "text/html", file.readString());
+    file.close();
+}
+
+void inputLocation(const char *ssid, const char *pass)
+{
+    WiFi.disconnect();
+    WiFi.mode(WIFI_AP_STA);
+
+    WiFi.softAP(ssid, "");
+
+    server.on("/", handleLocationInput);
+
+    server.begin();
 }
