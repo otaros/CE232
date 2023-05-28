@@ -199,11 +199,11 @@ void setup()
 	menu_cursor_Sprite.setColorDepth(16);
 	menu_cursor_Sprite.createSprite(15, 320);
 
-	GetCurrentWeather_Ticker.attach(3600, startGetCurrentWeather);			  // trigger Get Current Weather every 1 hour
-	GetForeCastWeather_Ticker.attach(24 * 3600 * 7, startGetForecastWeather); // trigger Get Forecast Weather every 7 days
+	GetCurrentWeather_Ticker.attach(3600, startGetCurrentWeather); // trigger Get Current Weather every 1 hour
+	// GetForeCastWeather_Ticker.attach(24 * 3600 * 7, startGetForecastWeather); // trigger Get Forecast Weather every 7 days
 
 	// control working flow
-	xTaskCreatePinnedToCore(WorkingFlowControl, "Working Flow Control", 5120, NULL, 2, &WorkingFlowControl_Handle, 0);
+	xTaskCreatePinnedToCore(WorkingFlowControl, "Working Flow Control", 5120, NULL, 10, &WorkingFlowControl_Handle, 0);
 	// wifi handle task
 	xTaskCreatePinnedToCore(HandleWiFi, "WiFi Handle", 3072, NULL, 2, &WiFi_Handle, 0);
 	// get data task
@@ -234,7 +234,6 @@ void setup()
 	Serial.println("Finished setup");
 	tft.println("Finished setup");
 	delay(500);
-	tft.fillScreen(TFT_BLACK); // clear display
 	// tft.unloadFont();
 
 	// xEventGroupSetBits(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_UV_FLAG); // first run
@@ -324,7 +323,7 @@ void WorkingFlowControl(void *pvParameters)
 			inputLocation(ap_ssid, "");
 			tft.println("Please input your new location");
 			tft.printf("Connect to WiFi: %s\n", ap_ssid);
-			tft.printf("Access to this IP: %s\n", WiFi.softAPIP().toString().c_str());
+			tft.printf("Access to this link: %s/location\n", WiFi.softAPIP().toString().c_str());
 			while (true)
 			{
 				server.handleClient();
@@ -338,12 +337,12 @@ void WorkingFlowControl(void *pvParameters)
 					break;
 				}
 			}
-
 			delay(2);
 			xEventGroupSetBits(GetData_EventGroup, GET_LOCATION_FLAG);
 			xEventGroupSetBits(WiFi_EventGroup, REQUEST_WIFI_FLAG);
+			xEventGroupWaitBits(WiFi_EventGroup, WIFI_IS_AVAILABLE_FOR_USE_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
 			getLocation(raw_address, lat, lon);						  // call to get new location
-			getTimeZone(lat, lon, gmtOffset_sec); // call to get new time zone
+			getTimeZone(lat, lon, gmtOffset_sec);					  // call to get new time zone
 			configTime(gmtOffset_sec, daylightOffset_sec, ntpServer); // resync time
 			tft.println("Waiting for time to resync...");
 			Serial.println("Waiting for time to resync...");
@@ -367,15 +366,17 @@ void WorkingFlowControl(void *pvParameters)
 		default:
 			break;
 		}
+		taskYIELD();
 	}
 }
 
 void startGetCurrentWeather()
 {
-	Serial.println("Get Current Weather Start");
+	// Serial.println("Get Current Weather Start");
 	BaseType_t xHigherPriorityTaskWoken, xResult;
 	xHigherPriorityTaskWoken = pdFALSE;
-	xResult = xEventGroupSetBitsFromISR(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_UV_FLAG, &xHigherPriorityTaskWoken);
+	// xResult = xEventGroupSetBitsFromISR(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_UV_FLAG, &xHigherPriorityTaskWoken);
+	xResult = xEventGroupSetBitsFromISR(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG, &xHigherPriorityTaskWoken);
 
 	if (xResult != pdFAIL)
 	{
@@ -385,7 +386,7 @@ void startGetCurrentWeather()
 
 void startGetForecastWeather()
 {
-	Serial.println("Get Forecast Weather Start");
+	// Serial.println("Get Forecast Weather Start");
 	BaseType_t xHigherPriorityTaskWoken, xResult;
 	xHigherPriorityTaskWoken = pdFALSE;
 	xResult = xEventGroupSetBitsFromISR(GetData_EventGroup, START_GET_FORECAST_WEATHER_FLAG, &xHigherPriorityTaskWoken);

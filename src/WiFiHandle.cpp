@@ -40,6 +40,12 @@ void connectToWiFi()
         // get ssid and pass from user
         while (true)
         {
+            if (xEventGroupGetBits(CurrentFlow_EventGroup) & MAIN)
+            {
+                vTaskSuspend(DisplayTitle_Handle);
+                tft.fillScreen(TFT_BLACK);
+                tft.setCursor(0, 0);
+            }
             uint8_t mac[6];
             WiFi.macAddress(mac);
             char ap_ssid[32];
@@ -69,6 +75,10 @@ void connectToWiFi()
                 data.print(doc.as<String>());
                 data.flush();
                 data.close();
+                if (xEventGroupGetBits(CurrentFlow_EventGroup) & MAIN)
+                {
+                    vTaskResume(DisplayTitle_Handle);
+                }
                 return;
             }
         }
@@ -131,6 +141,7 @@ void HandleWiFi(void *pvParameters)
         Serial.println("Disconnecting from WiFi");
         WiFi.disconnect();
         WiFi.mode(WIFI_OFF);
+        taskYIELD();
     }
 }
 
@@ -190,7 +201,6 @@ void inputLocation(const char *ssid, const char *pass)
 
     WiFi.softAP(ssid, "");
 
-    server.on("/", handleLocationInput);
-
+    server.on("/location", handleLocationInput);
     server.begin();
 }
