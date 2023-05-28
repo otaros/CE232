@@ -97,6 +97,7 @@ void DisplayCurrentWeather(void *pvParameters)
 
         // Serial.printf("%d, %d\n", current_weather_Sprite.getCursorX(), current_weather_Sprite.getCursorY());
         current_weather_Sprite.pushSprite(40, 5, TFT_BLACK);
+        taskYIELD();
     }
 }
 
