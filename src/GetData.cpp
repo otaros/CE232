@@ -19,7 +19,6 @@ void GetCurrentWeather(void *pvParameters)
         {
             continue;
         }
-
         xEventGroupSetBits(WiFi_EventGroup, REQUEST_WIFI_FLAG);
         Serial.println("Requesting wifi connection (Current Weather)");
         xEventGroupWaitBits(WiFi_EventGroup, WIFI_IS_AVAILABLE_FOR_USE_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
@@ -66,7 +65,6 @@ void ProcessingCurrentWeather(void *pvParameters)
         {
             continue;
         }
-
         Serial.println("Start processing current weather");
         data = FFat.open("/current.json", "r");
         deserializeJson(doc, data.readString());
@@ -93,6 +91,7 @@ void ProcessingCurrentWeather(void *pvParameters)
         }
 
         Serial.println("Done processing current weather");
+        tft.fillScreen(TFT_BLACK);
         xEventGroupSetBits(GetData_EventGroup, DONE_PROCESSING_CURRENT_WEATHER_FLAG);
         xEventGroupClearBits(GetData_EventGroup, DONE_GET_CURRENT_WEATHER_FLAG);
         taskYIELD(); // finish the task
