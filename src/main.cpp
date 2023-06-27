@@ -51,8 +51,7 @@ EventGroupHandle_t CurrentFlow_EventGroup = xEventGroupCreate();
 EventGroupHandle_t WiFi_EventGroup = xEventGroupCreate();
 EventGroupHandle_t GetData_EventGroup = xEventGroupCreate();
 
-SemaphoreHandle_t coordinate_mutex = xSemaphoreCreateMutex();
-SemaphoreHandle_t http_mutex = xSemaphoreCreateMutex();
+SemaphoreHandle_t http_mutex;
 
 QueueHandle_t current_weather_queue = xQueueCreate(1, sizeof(weather_data));
 QueueHandle_t forecast_queue = xQueueCreate(8, sizeof(forecast));
@@ -94,6 +93,10 @@ void setup()
 	}
 	psramInit();
 	Serial.println("PSRAM found and initialized!");
+
+	StaticSemaphore_t *xMutexBuffer = (StaticSemaphore_t *)ps_malloc(sizeof(StaticSemaphore_t));
+
+	http_mutex = xSemaphoreCreateMutexStatic(xMutexBuffer);
 
 	tft.init();
 	tft.initDMA();
@@ -199,9 +202,6 @@ void setup()
 	menu_cursor_Sprite.setColorDepth(16);
 	menu_cursor_Sprite.createSprite(15, 320);
 
-	GetCurrentWeather_Ticker.attach(3600, startGetCurrentWeather); // trigger Get Current Weather every 1 hour
-	// GetForeCastWeather_Ticker.attach(24 * 3600 * 7, startGetForecastWeather); // trigger Get Forecast Weather every 7 days
-
 	// control working flow
 	xTaskCreatePinnedToCore(WorkingFlowControl, "Working Flow Control", 5120, NULL, 10, &WorkingFlowControl_Handle, 0);
 	// wifi handle task
@@ -239,6 +239,9 @@ void setup()
 	// xEventGroupSetBits(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_UV_FLAG); // first run
 	xEventGroupSetBits(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG); // first run
 	xEventGroupSetBits(WorkingFlow_EventGroup, MAIN);											 // first run
+
+	GetCurrentWeather_Ticker.attach(10, startGetCurrentWeather); // trigger Get Current Weather every 1 hour
+	// GetForeCastWeather_Ticker.attach(24 * 3600 * 7, startGetForecastWeather); // trigger Get Forecast Weather every 7 days
 }
 
 void loop()
@@ -332,7 +335,7 @@ void WorkingFlowControl(void *pvParameters)
 					server.arg("address").toCharArray(raw_address, sizeof(raw_address));
 					NVS.setString("address", raw_address);
 					server.stop();
-					WiFi.disconnect();
+					WiFi.softAPdisconnect(true);
 					WiFi.mode(WIFI_OFF);
 					break;
 				}

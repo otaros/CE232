@@ -129,7 +129,6 @@ extern EventGroupHandle_t GetData_EventGroup;
 extern EventGroupHandle_t WorkingFlow_EventGroup;
 extern EventGroupHandle_t CurrentFlow_EventGroup;
 
-extern SemaphoreHandle_t coordinate_mutex;
 extern SemaphoreHandle_t http_mutex;
 
 // function prototypes

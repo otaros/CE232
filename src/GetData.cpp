@@ -24,7 +24,7 @@ void GetCurrentWeather(void *pvParameters)
         xEventGroupWaitBits(WiFi_EventGroup, WIFI_IS_AVAILABLE_FOR_USE_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
 
         snprintf(weather_url, sizeof(weather_url), "http://api.openweathermap.org/data/2.5/weather?lat=%.6f&lon=%.6f&appid=%s&units=metric", lat, lon, openweather_api_key);
-        xSemaphoreTake(http_mutex, portMAX_DELAY); // take the mutex
+        while(xSemaphoreTake(http_mutex, pdTICKS_TO_MS(10)) != pdTRUE); // take the mutex
         Serial.println("Start getting current weather");
         // Serial.println(weather_url); // for checking purpose
         http.begin(weather_url);
@@ -34,7 +34,15 @@ void GetCurrentWeather(void *pvParameters)
         }
         http.getString().toCharArray(payload, sizeof(payload));
         http.end();
-        xSemaphoreGive(http_mutex); // give the mutex
+
+        if (xSemaphoreGive(http_mutex) == pdFALSE)
+        {
+            Serial.println("Error giving the mutex");
+        }
+        else
+        {
+            Serial.println("Mutex given");
+        }
         // Serial.println(payload);    // show the payload
         deserializeJson(doc, payload);
         data = FFat.open("/current.json", "w", true);
@@ -90,6 +98,8 @@ void ProcessingCurrentWeather(void *pvParameters)
             ret = xQueueSend(current_weather_queue, current, portMAX_DELAY);
         }
 
+        heap_caps_free(current);
+
         Serial.println("Done processing current weather");
         tft.fillScreen(TFT_BLACK);
         xEventGroupSetBits(GetData_EventGroup, DONE_PROCESSING_CURRENT_WEATHER_FLAG);
@@ -120,7 +130,7 @@ void GetForecastWeather(void *pvParameters) // get 8-day forecast
         xEventGroupWaitBits(WiFi_EventGroup, WIFI_IS_AVAILABLE_FOR_USE_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
 
         snprintf(url, sizeof(url), "http://api.openweathermap.org/data/2.5/onecall?lat=%.6f&lon=%.6f&exclude=current,minutely,hourly,alerts&appid=%s&units=metric", lat, lon, openweather_api_key);
-        xSemaphoreTake(http_mutex, portMAX_DELAY); // take the mutex
+        while(xSemaphoreTake(http_mutex, pdTICKS_TO_MS(10)) != pdTRUE); // take the mutex
         Serial.println("Start getting forecast weather");
         http.begin(url);
         while (http.GET() != HTTP_CODE_OK)
@@ -129,7 +139,15 @@ void GetForecastWeather(void *pvParameters) // get 8-day forecast
         }
         http.getString().toCharArray(payload, sizeof(payload));
         http.end();
-        xSemaphoreGive(http_mutex); // give the mutex
+
+        if (xSemaphoreGive(http_mutex) == pdFALSE)
+        {
+            Serial.println("Error giving the mutex");
+        }
+        else
+        {
+            Serial.println("Mutex given");
+        }
         deserializeJson(doc, payload);
         data = FFat.open("/forecast.json", "w", true);
         data.print(doc.as<String>());
@@ -170,7 +188,11 @@ void ProcessingForecastWeather(void *pvParameters)
             doc["daily"][i]["weather"][0]["icon"].as<String>().toCharArray(forecast_data[i]->icon, 4);
             xQueueSend(forecast_queue, forecast_data[i], portMAX_DELAY);
         }
-        free(forecast_data); // free the memory
+        for (int i = 0; i < 8; i++)
+        {
+            heap_caps_free(forecast_data[i]);
+        }
+        heap_caps_free(forecast_data);
         data.close();
         Serial.println("Done processing forecast weather");
         xEventGroupSetBits(GetData_EventGroup, DONE_PROCESSING_FORECAST_WEATHER_FLAG);
@@ -199,7 +221,7 @@ void GetAQI(void *pvParameters)
         xEventGroupWaitBits(WiFi_EventGroup, WIFI_IS_AVAILABLE_FOR_USE_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
 
         snprintf(url, sizeof(url), "http://api.openweathermap.org/data/2.5/air_pollution?lat=%.6f&lon=%.6f&appid=%s", lat, lon, openweather_api_key);
-        xSemaphoreTake(http_mutex, portMAX_DELAY); // take the mutex
+        while(xSemaphoreTake(http_mutex, pdTICKS_TO_MS(10)) != pdTRUE); // take the mutex
         http.begin(url);
         while (http.GET() != HTTP_CODE_OK)
         {
@@ -207,7 +229,16 @@ void GetAQI(void *pvParameters)
         }
         deserializeJson(doc, http.getString());
         http.end();
-        xSemaphoreGive(http_mutex); // give the mutex
+
+        if (xSemaphoreGive(http_mutex) == pdFALSE)
+        {
+            Serial.println("Error giving the mutex");
+        }
+        else
+        {
+            Serial.println("Mutex given");
+        }
+
         aqi = doc["list"][0]["main"]["aqi"];
         Serial.printf("AQI: %d\n", aqi);
 
@@ -239,7 +270,7 @@ void GetUV(void *pvParameters)
         xEventGroupWaitBits(WiFi_EventGroup, WIFI_IS_AVAILABLE_FOR_USE_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
 
         snprintf(url, sizeof(url), "http://api.openuv.io/api/v1/uv?lat=%.6f&lng=%.6f&", lat, lon);
-        xSemaphoreTake(http_mutex, portMAX_DELAY); // take the mutex
+        while(xSemaphoreTake(http_mutex, pdTICKS_TO_MS(10)) != pdTRUE); // take the mutex
         Serial.println("Start getting UV index");
         http.begin(url);
         http.addHeader("x-access-token", uv_api_key);
@@ -250,7 +281,16 @@ void GetUV(void *pvParameters)
         }
         deserializeJson(doc, http.getString());
         http.end();
-        xSemaphoreGive(http_mutex); // give the mutex
+
+        if (xSemaphoreGive(http_mutex) == pdFALSE)
+        {
+            Serial.println("Error giving the mutex");
+        }
+        else
+        {
+            Serial.println("Mutex given");
+        }
+
         uv = doc["result"]["uv"];
         Serial.printf("UV index: %.2f\n", uv);
 
@@ -283,7 +323,7 @@ void Get3_HoursForecastWeather(void *pvParameters)
         xEventGroupWaitBits(WiFi_EventGroup, WIFI_IS_AVAILABLE_FOR_USE_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
 
         snprintf(url, sizeof(url), "http://api.openweathermap.org/data/2.5/forecast?lat=%.6f&lon=%.6f&appid=%s&units=metric&cnt=6", lat, lon, openweather_api_key);
-        xSemaphoreTake(http_mutex, portMAX_DELAY); // take the mutex
+        while(xSemaphoreTake(http_mutex, pdTICKS_TO_MS(10)) != pdTRUE); // take the mutex
         http.begin(url);
         while (http.GET() != HTTP_CODE_OK)
         {
@@ -292,7 +332,15 @@ void Get3_HoursForecastWeather(void *pvParameters)
         }
         http.getString().toCharArray(payload, sizeof(payload));
         http.end();
-        xSemaphoreGive(http_mutex); // give the mutex
+
+        if (xSemaphoreGive(http_mutex) == pdFALSE)
+        {
+            Serial.println("Failed to give the mutex");
+        }
+        else
+        {
+            Serial.println("Mutex given");
+        }
         deserializeJson(doc, payload);
         File data = FFat.open("/3hours_forecast.json", "w", true);
         data.print(doc.as<String>());
@@ -311,6 +359,7 @@ void Processing3_HoursForecastWeather(void *pvParameters)
 {
     PSRAMJsonDocument doc(4096);
     File data;
+    BaseType_t ret;
     for (;;)
     {
         xEventGroupWaitBits(GetData_EventGroup, DONE_GET_3HOURS_FORECAST_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
@@ -327,9 +376,17 @@ void Processing3_HoursForecastWeather(void *pvParameters)
             forecast_data[i]->temp_min = doc["list"][i]["main"]["temp_min"];
             forecast_data[i]->temp_max = doc["list"][i]["main"]["temp_max"];
             doc["list"][i]["weather"][0]["icon"].as<String>().toCharArray(forecast_data[i]->icon, 4);
-            xQueueSend(three_hours_forecast_queue, &forecast_data[i], portMAX_DELAY);
+            ret = xQueueSend(three_hours_forecast_queue, &forecast_data[i], portMAX_DELAY);
+            while (ret != pdTRUE)
+            {
+                ret = xQueueSend(three_hours_forecast_queue, &forecast_data[i], portMAX_DELAY);
+            }
         }
-        free(forecast_data);
+        for (int i = 0; i < 6; i++)
+        {
+            heap_caps_free(forecast_data[i]);
+        }
+        heap_caps_free(forecast_data);
         data.close();
         Serial.println("Done processing 3-Hours Forecast");
         xEventGroupSetBits(GetData_EventGroup, DONE_PROCESSING_3HOURS_FORECAST_FLAG);
