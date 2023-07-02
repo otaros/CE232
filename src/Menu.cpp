@@ -39,7 +39,9 @@ void MenuControl(void *pvParameters)
                     break;
                 case 1:
                     Serial.println("THREE_HOURS_FORECAST");
-                    // re_render = true;
+                    xEventGroupSetBits(WorkingFlow_EventGroup, THREE_HOURS_FORECAST);
+                    xEventGroupClearBits(CurrentFlow_EventGroup, 0xFFFF);
+                    re_render = true;
                     break;
                 case 2:
                     Serial.println("INPUT_API_KEY");

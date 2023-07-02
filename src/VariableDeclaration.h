@@ -6,7 +6,7 @@
 #include <Arduino.h>
 #include <freertos/event_groups.h>
 #include <string>
-#include "time.h"
+#include <time.h>
 #include <HTTPClient.h>
 #include <WiFi.h>
 #include <FS.h>
@@ -100,28 +100,31 @@ extern double lat, lon;
 extern TFT_eSPI tft;
 extern TFT_eSprite title_Sprite;
 extern TFT_eSprite current_weather_Sprite;
-extern TFT_eSprite forecast_Sprite1, forecast_Sprite2, forecast_Sprite3;
+extern TFT_eSprite forecast3hours_weather_Sprite;
+// extern TFT_eSprite forecast_Sprite1, forecast_Sprite2, forecast_Sprite3;
 extern TFT_eSprite Menu_Sprite;
 extern TFT_eSprite menu_cursor_Sprite;
 
 extern TaskHandle_t WorkingFlowControl_Handle;
 extern TaskHandle_t WiFi_Handle;
 extern TaskHandle_t GetCurrentWeather_Handle;
-extern TaskHandle_t ProcessingCurrentWeather_Handle;
-extern TaskHandle_t GetForecastWeather_Handle;
-extern TaskHandle_t ProcessingForecastWeather_Handle;
+extern TaskHandle_t GetThreeHoursForecast_Handle;
+// extern TaskHandle_t GetForecastWeather_Handle;
 extern TaskHandle_t GetAQI_Handle;
 extern TaskHandle_t GetUV_Handle;
+// extern TaskHandle_t ProcessingForecastWeather_Handle;
+extern TaskHandle_t ProcessingCurrentWeather_Handle;
+extern TaskHandle_t ProcessingThreeHoursForecast_Handle;
 extern TaskHandle_t DisplayTitle_Handle;
 extern TaskHandle_t DisplayCurrentWeather_Handle;
-extern TaskHandle_t DisplayForecastWeather_Handle;
+// extern TaskHandle_t DisplayForecastWeather_Handle;
+extern TaskHandle_t DisplayThreeHoursForecast_Handle;
 extern TaskHandle_t DisplayMenu_Handle;
 extern TaskHandle_t MenuControl_Handle;
-extern TaskHandle_t ThreeHoursForecast_Handle;
 // extern TaskHandle_t ErrorMonitor_Handle;
 
 extern QueueHandle_t current_weather_queue;
-extern QueueHandle_t forecast_queue;
+// extern QueueHandle_t forecast_queue;
 extern QueueHandle_t three_hours_forecast_queue;
 
 extern EventGroupHandle_t WiFi_EventGroup;
@@ -129,7 +132,7 @@ extern EventGroupHandle_t GetData_EventGroup;
 extern EventGroupHandle_t WorkingFlow_EventGroup;
 extern EventGroupHandle_t CurrentFlow_EventGroup;
 
-extern SemaphoreHandle_t http_mutex;
+// extern SemaphoreHandle_t http_mutex;
 
 // function prototypes
 #endif // __VARIABLEDECLARATION_H__

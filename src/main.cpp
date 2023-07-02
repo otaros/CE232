@@ -27,19 +27,20 @@ bool newScreen = false;
 
 struct tm structTime;
 
-// TinyGPSPlus gps;
-
 TaskHandle_t WorkingFlowControl_Handle;
 TaskHandle_t WiFi_Handle;
 TaskHandle_t GetCurrentWeather_Handle;
-TaskHandle_t ProcessingCurrentWeather_Handle;
-TaskHandle_t GetForecastWeather_Handle;
-TaskHandle_t ProcessingForecastWeather_Handle;
-TaskHandle_t DisplayTitle_Handle;
-TaskHandle_t DisplayCurrentWeather_Handle;
-TaskHandle_t DisplayForecastWeather_Handle;
+TaskHandle_t GetThreeHoursForecast_Handle;
+// TaskHandle_t GetForecastWeather_Handle;
 TaskHandle_t GetAQI_Handle;
 TaskHandle_t GetUV_Handle;
+TaskHandle_t ProcessingCurrentWeather_Handle;
+// TaskHandle_t ProcessingForecastWeather_Handle;
+TaskHandle_t ProcessingThreeHoursForecast_Handle;
+TaskHandle_t DisplayTitle_Handle;
+TaskHandle_t DisplayCurrentWeather_Handle;
+// TaskHandle_t DisplayForecastWeather_Handle;
+TaskHandle_t DisplayThreeHoursForecast_Handle;
 TaskHandle_t ButtonMonitoring_Handle;
 TaskHandle_t MenuControl_Handle;
 
@@ -51,17 +52,18 @@ EventGroupHandle_t CurrentFlow_EventGroup = xEventGroupCreate();
 EventGroupHandle_t WiFi_EventGroup = xEventGroupCreate();
 EventGroupHandle_t GetData_EventGroup = xEventGroupCreate();
 
-SemaphoreHandle_t http_mutex;
+// SemaphoreHandle_t http_mutex;
 
-QueueHandle_t current_weather_queue = xQueueCreate(1, sizeof(weather_data));
-QueueHandle_t forecast_queue = xQueueCreate(8, sizeof(forecast));
-QueueHandle_t three_hours_forecast_queue = xQueueCreate(6, sizeof(forecast));
+QueueHandle_t current_weather_queue;
+// QueueHandle_t forecast_queue = xQueueCreate(8, sizeof(forecast) + 1);
+QueueHandle_t three_hours_forecast_queue;
 
 TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite title_Sprite = TFT_eSprite(&tft);
 TFT_eSprite current_weather_Sprite = TFT_eSprite(&tft);
 TFT_eSprite Menu_Sprite = TFT_eSprite(&tft);
 TFT_eSprite menu_cursor_Sprite = TFT_eSprite(&tft);
+TFT_eSprite forecast3hours_weather_Sprite = TFT_eSprite(&tft);
 
 HTTPClient http;
 
@@ -95,8 +97,10 @@ void setup()
 	Serial.println("PSRAM found and initialized!");
 
 	StaticSemaphore_t *xMutexBuffer = (StaticSemaphore_t *)ps_malloc(sizeof(StaticSemaphore_t));
+	current_weather_queue = xQueueCreate(1, sizeof(weather_data) + 1);
+	three_hours_forecast_queue = xQueueCreate(7, sizeof(forecast));
 
-	http_mutex = xSemaphoreCreateMutexStatic(xMutexBuffer);
+	// http_mutex = xSemaphoreCreateMutexStatic(xMutexBuffer);
 
 	tft.init();
 	tft.initDMA();
@@ -198,6 +202,11 @@ void setup()
 	Menu_Sprite.createSprite(225, 320);
 	Menu_Sprite.loadFont("Calibri-Bold-11", FFat);
 
+	// create forecast 3 hours sprite and load font
+	forecast3hours_weather_Sprite.setColorDepth(16);
+	forecast3hours_weather_Sprite.createSprite(120, 100);
+	forecast3hours_weather_Sprite.loadFont("Calibri-Bold-11", FFat);
+
 	// create menu cursor sprite
 	menu_cursor_Sprite.setColorDepth(16);
 	menu_cursor_Sprite.createSprite(15, 320);
@@ -208,27 +217,30 @@ void setup()
 	xTaskCreatePinnedToCore(HandleWiFi, "WiFi Handle", 3072, NULL, 2, &WiFi_Handle, 0);
 	// get data task
 	xTaskCreatePinnedToCore(GetCurrentWeather, "Get Current Weather", 4096, NULL, 1, &GetCurrentWeather_Handle, 0);
-	xTaskCreatePinnedToCore(GetForecastWeather, "Get Forecast Weather", 8192, NULL, 1, &GetForecastWeather_Handle, 0);
+	// xTaskCreatePinnedToCore(GetForecastWeather, "Get Forecast Weather", 8192, NULL, 1, &GetForecastWeather_Handle, 0);
 	xTaskCreatePinnedToCore(GetAQI, "Get AQI", 3072, NULL, 1, &GetAQI_Handle, 0);
 	xTaskCreatePinnedToCore(GetUV, "Get UV", 3072, NULL, 1, &GetUV_Handle, 0);
+	xTaskCreatePinnedToCore(Get3_HoursForecastWeather, "Get 3 hours forecast", 10000, NULL, 1, &GetThreeHoursForecast_Handle, 0);
 	// processing task
 	xTaskCreatePinnedToCore(ProcessingCurrentWeather, "Processing Current Weather", 5120, NULL, 1, &ProcessingCurrentWeather_Handle, 0);
-	xTaskCreatePinnedToCore(ProcessingForecastWeather, "Processing Forecast Weather", 5120, NULL, 1, &ProcessingForecastWeather_Handle, 0);
+	// xTaskCreatePinnedToCore(ProcessingForecastWeather, "Processing Forecast Weather", 5120, NULL, 1, &ProcessingForecastWeather_Handle, 0);
+	xTaskCreatePinnedToCore(Processing3_HoursForecastWeather, "Processing 3 hours forecast", 5120, NULL, 1, &ProcessingThreeHoursForecast_Handle, 0);
 	// display task
 	xTaskCreatePinnedToCore(DisplayTitle, "Display Title", 2048, NULL, 1, &DisplayTitle_Handle, 1);
 	xTaskCreatePinnedToCore(DisplayCurrentWeather, "Display Current Weather", 4096, NULL, 1, &DisplayCurrentWeather_Handle, 1);
-	xTaskCreatePinnedToCore(DisplayForecastWeather, "Display Forecast Weather", 5120, NULL, 1, &DisplayForecastWeather_Handle, 1);
+	// xTaskCreatePinnedToCore(DisplayForecastWeather, "Display Forecast Weather", 5120, NULL, 1, &DisplayForecastWeather_Handle, 1);
+	xTaskCreatePinnedToCore(DisplayThreeHoursForecast, "Display 3 hours forecast", 4096, NULL, 1, &DisplayThreeHoursForecast_Handle, 1);
 	// check button state
 	xTaskCreatePinnedToCore(ButtonMonitoring, "Button Monitoring", 2560, NULL, 2, &ButtonMonitoring_Handle, 0);
 	xTaskCreatePinnedToCore(MenuControl, "Menu Control", 4096, NULL, 1, &MenuControl_Handle, 1);
 
 	// Serial.println("Suspending all tasks");
 	vTaskSuspend(GetCurrentWeather_Handle);
-	vTaskSuspend(GetForecastWeather_Handle);
+	// vTaskSuspend(GetForecastWeather_Handle);
 	vTaskSuspend(GetAQI_Handle);
 	vTaskSuspend(GetUV_Handle);
 	vTaskSuspend(ProcessingCurrentWeather_Handle);
-	vTaskSuspend(ProcessingForecastWeather_Handle);
+	// vTaskSuspend(ProcessingForecastWeather_Handle);
 	vTaskSuspend(DisplayTitle_Handle);
 
 	Serial.println("Finished setup");
@@ -240,7 +252,7 @@ void setup()
 	xEventGroupSetBits(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG); // first run
 	xEventGroupSetBits(WorkingFlow_EventGroup, MAIN);											 // first run
 
-	GetCurrentWeather_Ticker.attach(10, startGetCurrentWeather); // trigger Get Current Weather every 1 hour
+	GetCurrentWeather_Ticker.attach(50, startGetCurrentWeather); // trigger Get Current Weather every 1 hour
 	// GetForeCastWeather_Ticker.attach(24 * 3600 * 7, startGetForecastWeather); // trigger Get Forecast Weather every 7 days
 }
 
@@ -264,14 +276,14 @@ void WorkingFlowControl(void *pvParameters)
 			}
 			tft.fillScreen(TFT_BLACK);
 			vTaskResume(GetCurrentWeather_Handle);
-			vTaskResume(GetForecastWeather_Handle);
+			// vTaskResume(GetForecastWeather_Handle);
 			vTaskResume(GetAQI_Handle);
 			vTaskResume(GetUV_Handle);
 			vTaskResume(ProcessingCurrentWeather_Handle);
-			vTaskResume(ProcessingForecastWeather_Handle);
+			// vTaskResume(ProcessingForecastWeather_Handle);
 			vTaskResume(DisplayTitle_Handle);
 			vTaskResume(DisplayCurrentWeather_Handle);
-			vTaskResume(DisplayForecastWeather_Handle);
+			// vTaskResume(DisplayForecastWeather_Handle);
 			xEventGroupSetBits(CurrentFlow_EventGroup, MAIN);
 			break;
 		/* ----------------------- */
@@ -283,9 +295,20 @@ void WorkingFlowControl(void *pvParameters)
 			tft.fillScreen(TFT_BLACK);
 			vTaskSuspend(DisplayTitle_Handle);
 			vTaskSuspend(DisplayCurrentWeather_Handle);
-			vTaskSuspend(DisplayForecastWeather_Handle);
+			// vTaskSuspend(DisplayForecastWeather_Handle);
 
-			tft.println("Please wait for task to finish");
+			// resume to finish task and prevent infinitive waiting
+			vTaskResume(GetCurrentWeather_Handle);
+			// vTaskResume(GetForecastWeather_Handle);
+			vTaskResume(GetAQI_Handle);
+			vTaskResume(GetUV_Handle);
+			vTaskResume(ProcessingCurrentWeather_Handle);
+			// vTaskResume(ProcessingForecastWeather_Handle);
+
+			tft.setTextDatum(MC_DATUM);
+			tft.drawString("Please wait for task to finish", tft.width() / 2, 40, 0);
+			tft.setTextDatum(TL_DATUM);
+
 			while (xEventGroupGetBits(GetData_EventGroup) & (START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_UV_FLAG))
 			{
 				delay(100);
@@ -293,11 +316,11 @@ void WorkingFlowControl(void *pvParameters)
 			tft.fillScreen(TFT_BLACK);
 
 			vTaskSuspend(GetCurrentWeather_Handle);
-			vTaskSuspend(GetForecastWeather_Handle);
+			// vTaskSuspend(GetForecastWeather_Handle);
 			vTaskSuspend(GetAQI_Handle);
 			vTaskSuspend(GetUV_Handle);
 			vTaskSuspend(ProcessingCurrentWeather_Handle);
-			vTaskSuspend(ProcessingForecastWeather_Handle);
+			// vTaskSuspend(ProcessingForecastWeather_Handle);
 			displayMenu();
 			xEventGroupSetBits(CurrentFlow_EventGroup, MENU);
 			break;
@@ -307,7 +330,9 @@ void WorkingFlowControl(void *pvParameters)
 			{
 				break;
 			}
-			// tft.fillScreen(TFT_BLACK);
+			tft.fillScreen(TFT_BLACK);
+			xEventGroupSetBits(GetData_EventGroup, START_GET_3HOURS_FORECAST_FLAG);
+
 
 			xEventGroupSetBits(CurrentFlow_EventGroup, THREE_HOURS_FORECAST);
 			break;
@@ -358,6 +383,7 @@ void WorkingFlowControl(void *pvParameters)
 			xEventGroupClearBits(CurrentFlow_EventGroup, 0xFFFF);
 			// xEventGroupSetBits(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_UV_FLAG);
 			newScreen = true; // force to update to new screen
+			GetCurrentWeather_Ticker.attach(10, startGetCurrentWeather); // reset timer
 			xEventGroupSetBits(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG);
 			xEventGroupSetBits(WorkingFlow_EventGroup, MAIN);
 			break;
@@ -375,7 +401,7 @@ void WorkingFlowControl(void *pvParameters)
 
 void startGetCurrentWeather()
 {
-	// Serial.println("Get Current Weather Start");
+	Serial.println("Interrupt");
 	BaseType_t xHigherPriorityTaskWoken, xResult;
 	xHigherPriorityTaskWoken = pdFALSE;
 	// xResult = xEventGroupSetBitsFromISR(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_UV_FLAG, &xHigherPriorityTaskWoken);

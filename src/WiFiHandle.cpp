@@ -94,7 +94,7 @@ void HandleWiFi(void *pvParameters)
         xEventGroupWaitBits(WiFi_EventGroup, REQUEST_WIFI_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
         delay(100);
         bits = xEventGroupWaitBits(GetData_EventGroup, START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_FORECAST_WEATHER_FLAG | START_GET_UV_FLAG | START_GET_3HOURS_FORECAST_FLAG | GET_LOCATION_FLAG, pdFALSE, pdFALSE, portMAX_DELAY);
-        bits = bits & (START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_FORECAST_WEATHER_FLAG | START_GET_UV_FLAG | GET_LOCATION_FLAG);
+        bits = bits & (START_GET_CURRENT_WEATHER_FLAG | START_GET_AQI_FLAG | START_GET_FORECAST_WEATHER_FLAG | START_GET_UV_FLAG | START_GET_3HOURS_FORECAST_FLAG | GET_LOCATION_FLAG);
         count = 0;       // count numbers of tasks that use WiFi
         while (bits > 0) // Brian Kernighan’s Algorithm
         {

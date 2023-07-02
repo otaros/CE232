@@ -28,7 +28,7 @@ void DisplayCurrentWeather(void *pvParameters)
     {
         // xEventGroupWaitBits(GetData_EventGroup, DONE_PROCESSING_CURRENT_WEATHER_FLAG | DONE_GET_AQI_FLAG | DONE_GET_UV_FLAG, pdTRUE, pdTRUE, portMAX_DELAY);
         xEventGroupWaitBits(GetData_EventGroup, DONE_PROCESSING_CURRENT_WEATHER_FLAG | DONE_GET_AQI_FLAG, pdTRUE, pdTRUE, portMAX_DELAY);
-        current_weather_Sprite.fillSprite(TFT_BLACK);
+        current_weather_Sprite.fillScreen(TFT_BLACK);
         Serial.println("Start displaying current weather");
 
         if (newScreen)
@@ -38,16 +38,16 @@ void DisplayCurrentWeather(void *pvParameters)
         }
         if (uxQueueMessagesWaiting(current_weather_queue) != 0)
         {
-            ret = xQueueReceive(current_weather_queue, data, portMAX_DELAY);
-            while (ret != pdTRUE)
+            do
             {
-                ret = xQueueReceive(current_weather_queue, data, portMAX_DELAY);
-            }
+                ret = xQueueReceive(current_weather_queue, data, pdTICKS_TO_MS(10));
+                if (ret == pdTRUE)
+                    xQueueReset(current_weather_queue);
+            } while (ret != pdTRUE);
         }
         // 1.15 spacing for each line
         sprintf(filename, "/%s.bmp", data->icon);
         Serial.println(filename);
-        current_weather_Sprite.fillSprite(TFT_BLACK);
 
         drawBmpToSprite(filename, 48, 0, &current_weather_Sprite);
         current_weather_Sprite.setCursor(60, 55);
@@ -97,15 +97,67 @@ void DisplayCurrentWeather(void *pvParameters)
 
         // Serial.printf("%d, %d\n", current_weather_Sprite.getCursorX(), current_weather_Sprite.getCursorY());
         current_weather_Sprite.pushSprite(40, 5, TFT_BLACK);
-        taskYIELD();
+        // taskYIELD();
     }
 }
 
-void DisplayForecastWeather(void *pvParameters)
+// void DisplayForecastWeather(void *pvParameters)
+// {
+//     for (;;)
+//     {
+//         xEventGroupWaitBits(GetData_EventGroup, DONE_PROCESSING_FORECAST_WEATHER_FLAG, pdTRUE, pdFALSE, portMAX_DELAY);
+//         delay(500);
+//     }
+// }
+
+void DisplayThreeHoursForecast(void *pvParameters)
 {
+    BaseType_t ret;
+    forecast *data = (forecast *)ps_malloc(sizeof(forecast));
+    char filename[10];
+    char time[10];
     for (;;)
     {
-        xEventGroupWaitBits(GetData_EventGroup, DONE_PROCESSING_FORECAST_WEATHER_FLAG, pdTRUE, pdFALSE, portMAX_DELAY);
+        xEventGroupWaitBits(GetData_EventGroup, DONE_PROCESSING_3HOURS_FORECAST_FLAG, pdTRUE, pdFALSE, portMAX_DELAY);
+        forecast3hours_weather_Sprite.fillSprite(TFT_BLACK);
+        Serial.println("Start displaying 3 hours forecast");
+        // forecast3hours_weather_Sprite.setTextDatum(MC_DATUM);
+        // forecast3hours_weather_Sprite.drawString("3 hours forecast", tft.width() / 2, 13, 0);
+        tft.setTextDatum(MC_DATUM);
+        tft.drawString(display_name, tft.width() / 2, 11, 0);
+        tft.setTextDatum(TL_DATUM);
+
+        if (uxQueueMessagesWaiting(three_hours_forecast_queue) != 0)
+        {
+            for (uint8_t i = 0; i < 6; i++)
+            {
+                do
+                {
+                    ret = xQueueReceive(three_hours_forecast_queue, data, pdTICKS_TO_MS(10));
+                } while (ret != pdTRUE);
+
+                forecast3hours_weather_Sprite.fillScreen(TFT_BLACK);
+                sprintf(filename, "/%s.bmp", data->icon);
+                Serial.println(filename);
+                drawBmpToSprite(filename, 28, 0, &forecast3hours_weather_Sprite);
+                forecast3hours_weather_Sprite.setTextDatum(MC_DATUM);
+                sprintf(time, "%02d:%02d", hour(data->dt + gmtOffset_sec), minute(data->dt));
+                forecast3hours_weather_Sprite.drawString(time, forecast3hours_weather_Sprite.width() / 2, 11, 0);
+
+                drawBmpToSprite("/thermometer.bmp", 14, 49, &forecast3hours_weather_Sprite);
+                forecast3hours_weather_Sprite.setCursor(28, 50);
+                forecast3hours_weather_Sprite.printf("%.2f°C/%.2f°C", data->temp_min, data->temp_max);
+
+                drawBmpToSprite("/water_drop.bmp", 14, 63, &forecast3hours_weather_Sprite);
+                forecast3hours_weather_Sprite.setCursor(28, 64);
+                forecast3hours_weather_Sprite.printf("%d%%", data->humidity);
+
+                forecast3hours_weather_Sprite.pushSprite((i % 2 == 0 ? 0 : 120), (i == 0 || i == 1 ? 20 : 100 * (i - 1) + 10) - (i > 2 & i % 2 == 1 ? 100 : 0) - (i > 3 ? 100 : 0), TFT_BLACK);
+            }
+        }
+
+        xEventGroupClearBits(GetData_EventGroup, DONE_PROCESSING_3HOURS_FORECAST_FLAG);
+
         delay(500);
     }
 }
